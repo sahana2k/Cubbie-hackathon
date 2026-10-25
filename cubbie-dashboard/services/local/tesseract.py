@@ -1,4 +1,4 @@
-"""Connect a remote Tesseract read API; legacy local hosting remains available internally."""
+"""Loopback bridge to the bundled Discord agent. Secrets exist only in process memory."""
 import json
 import os
 from pathlib import Path
@@ -7,10 +7,8 @@ import secrets
 import sqlite3
 import subprocess
 import threading
-from urllib.request import Request, urlopen, build_opener
+from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlsplit, parse_qs
-from canvas import NoRedirect
 
 
 class Tesseract:
@@ -19,31 +17,26 @@ class Tesseract:
         self.process = None
         self.port = None
         self.token = None
-        self.remote_url = None
-        self.remote_token = None
         self.lock = threading.RLock()
         self.credentials = None
         try:
             saved = json.loads((self.folder / 'tesseract-settings.json').read_text())
-            self.metadata = {k: saved[k] for k in ('guildId', 'provider', 'model', 'baseUrl', 'remoteUrl') if isinstance(saved.get(k), str)}
+            self.metadata = {k: saved[k] for k in ('guildId', 'provider', 'model', 'baseUrl') if isinstance(saved.get(k), str)}
         except (OSError, ValueError, TypeError, AttributeError):
             self.metadata = {}
 
     def settings(self):
         with self.lock:
-            return {**self.metadata, 'connected': bool(self.remote_url or (self.process and self.process.poll() is None and self.port)),
-                    'hasCredentials': self.credentials is not None or self.remote_token is not None}
+            return {**self.metadata, 'connected': bool(self.process and self.process.poll() is None and self.port),
+                    'hasCredentials': self.credentials is not None}
 
     def disconnect(self):
         with self.lock:
             self._stop()
             self.credentials = None
-            self.remote_url = self.remote_token = None
 
     def connect(self, data):
         with self.lock:
-            if 'remoteUrl' in data:
-                return self.connect_remote(data)
             previous = self.credentials
             candidate = {**self.metadata, **data}
             for key in ('apiKey', 'botToken'):
@@ -70,76 +63,6 @@ class Tesseract:
                     except Exception:
                         raise ValueError('The new settings failed and the previous connection could not restart. Your previous settings are retained; retry when the connection is available.') from None
                 raise error
-
-    @staticmethod
-    def remote_origin(value):
-        if not isinstance(value, str) or not value.strip():
-            raise ValueError('Enter the URL of your running Tesseract dashboard service.')
-        url = urlsplit(value.strip())
-        if (not url.hostname or url.username or url.password or url.query or url.fragment
-                or url.path not in ('', '/') or url.scheme not in ('https', 'http')
-                or (url.scheme == 'http' and url.hostname not in ('127.0.0.1', 'localhost', '::1'))):
-            raise ValueError('Use an HTTPS Tesseract service URL, or an HTTP loopback URL for an SSH tunnel.')
-        try:
-            url.port
-        except ValueError:
-            raise ValueError('Enter a valid service port.') from None
-        return value.strip().rstrip('/')
-
-    @staticmethod
-    def remote_path(value):
-        url = urlsplit(value)
-        allowed = ('/servers', '/channels', '/snapshot', '/messages')
-        if url.scheme or url.netloc or url.fragment or url.path not in allowed:
-            raise ValueError('Unsupported Tesseract read.')
-        query = parse_qs(url.query, keep_blank_values=True)
-        expected = set() if url.path == '/servers' else {'guild'} if url.path == '/channels' else {'guild', 'channel'}
-        if set(query) != expected or any(len(v) != 1 or not v[0].isascii() or not v[0].isdigit() for v in query.values()):
-            raise ValueError('Choose a connected server and channel.')
-        return value
-
-    @staticmethod
-    def remote_get(origin, token, path):
-        Tesseract.remote_path(path)
-        request = Request(origin + path, headers={'Authorization': 'Bearer ' + token, 'Accept': 'application/json'})
-        try:
-            with build_opener(NoRedirect()).open(request, timeout=20) as response:
-                raw = response.read(5_000_001)
-                if len(raw) > 5_000_000:
-                    raise ValueError('The remote Tesseract response is too large.')
-                return json.loads(raw)
-        except HTTPError as error:
-            if error.code in (401, 403):
-                raise ValueError('The remote service rejected its connection key. Use the Tesseract bridge key, not your Discord bot token.') from None
-            if 300 <= error.code < 400:
-                raise ValueError('The service redirected the request. Enter its direct API URL; no key was forwarded.') from None
-            raise ValueError(f'The remote Tesseract service returned HTTP {error.code}.') from None
-        except (URLError, TimeoutError):
-            raise ValueError('Could not reach the remote Tesseract service. Check its URL or SSH tunnel.') from None
-        except (json.JSONDecodeError, UnicodeError):
-            raise ValueError('The URL did not return Tesseract API data. Use the service API URL, not a Discord invite or website.') from None
-
-    def connect_remote(self, data):
-        origin = self.remote_origin(data.get('remoteUrl'))
-        # A blank field can reuse a key only for the same already-connected origin.
-        token = data.get('remoteToken') or (self.remote_token if origin == self.remote_url else '')
-        if not isinstance(token, str) or not token or len(token) > 4096 or any(c.isspace() for c in token):
-            raise ValueError('Enter the remote Tesseract service connection key.')
-        result = self.remote_get(origin, token, '/servers')
-        if (not isinstance(result, dict) or not isinstance(result.get('servers'), list)
-                or not result['servers'] or any(not isinstance(server, dict) or not isinstance(server.get('id'), str)
-                or not isinstance(server.get('name'), str) for server in result['servers'])):
-            raise ValueError('The URL is not a ready Tesseract dashboard service with a connected Discord server.')
-        metadata = {'remoteUrl': origin, 'guildId': result['servers'][0]['id']}
-        path = self.folder / 'tesseract-settings.json'
-        temporary = path.with_suffix('.tmp')
-        with open(temporary, 'w', opener=lambda p, flags: os.open(p, flags, 0o600)) as output:
-            json.dump(metadata, output)
-        os.replace(temporary, path)
-        self._stop()
-        self.credentials = None
-        self.remote_url, self.remote_token, self.metadata = origin, token, metadata
-        return result
 
     def database_path(self, guild_id):
         """Reuse this workspace's existing bot state instead of silently starting empty."""
@@ -237,11 +160,7 @@ class Tesseract:
 
     def request(self, path):
         with self.lock:
-            if self.remote_url:
-                return self.remote_get(self.remote_url, self.remote_token, path)
             if not self.process or self.process.poll() is not None or not self.port:
-                if self.metadata.get('remoteUrl'):
-                    raise ValueError('Reconnect your remote Tesseract service after restarting the dashboard.')
                 raise ValueError('Connect your Discord bot and LLM first. Reconnect after restarting the dashboard.')
             request = Request(f'http://127.0.0.1:{self.port}{path}', headers={'Authorization': 'Bearer ' + self.token})
             try:

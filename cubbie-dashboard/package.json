@@ -5,7 +5,7 @@
   "description": "Local Cubbie dashboard for Canvas, iMessage and Tesseract.",
   "packageManager": "pnpm@9.12.3",
   "scripts": {
-    "live": "python3 services/local/server.py",
+    "live": "pnpm build:tesseract && python3 services/local/server.py",
     "test:local": "python3 -m unittest discover -s services/local -p 'test_*.py'",
     "dev": "pnpm --filter @cubbie/web dev",
     "build": "pnpm -r build",

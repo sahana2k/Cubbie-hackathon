@@ -29,7 +29,8 @@ export async function handleInteraction(client: Client, i: Interaction) {
     const msg = e instanceof ActionError ? e.message : 'Something went wrong on my side. Try again in a moment.';
     if (!(e instanceof ActionError)) log.error('interaction failed', e);
     if (i.isRepliable()) {
-      if (i.deferred || i.replied) await i.followUp({ content: `⚠️ ${msg}`, flags: EPHEMERAL }).catch(() => null);
+      if (i.deferred && !i.replied) await i.editReply({ content: `⚠️ ${msg}` }).catch(() => null);
+      else if (i.replied) await i.followUp({ content: `⚠️ ${msg}`, flags: EPHEMERAL }).catch(() => null);
       else await i.reply({ content: `⚠️ ${msg}`, flags: EPHEMERAL }).catch(() => null);
     }
   }
@@ -192,6 +193,8 @@ async function slash(client: Client, i: ChatInputCommandInteraction) {
 }
 
 async function setup(client: Client, i: ChatInputCommandInteraction) {
+  // Acknowledge before parsing dates or touching SQLite; Discord allows only 3s.
+  await i.deferReply();
   if (!i.guildId) throw new ActionError('Run /setup inside a server channel.');
   const tz = i.options.getString('timezone') || config.defaultTimezone;
   if (!DateTime.local().setZone(tz).isValid) throw new ActionError(`Unknown timezone "${tz}". Use an IANA name like America/Phoenix.`);
@@ -200,7 +203,6 @@ async function setup(client: Client, i: ChatInputCommandInteraction) {
   if (deadline == null) throw new ActionError(`I couldn't read "${deadlineText}" as a date. Try "Dec 5 11:59pm".`);
   const rubric = i.options.getAttachment('rubric');
   const submitter = i.options.getUser('submitter');
-  if (rubric) await i.deferReply();
 
   let project = repo.getProjectByChannel(i.channelId);
   if (project) repo.updateProject(project.id, { name: i.options.getString('name', true), course: i.options.getString('course'), final_deadline: deadline, timezone: tz });
@@ -222,7 +224,7 @@ async function setup(client: Client, i: ChatInputCommandInteraction) {
     ].join('\n'));
   if (!rubric) {
     welcome.addFields({ name: 'Got a rubric?', value: 'Upload it with `/rubric` and I\'ll turn it into a claim board of deliverables.' });
-    return i.reply({ embeds: [welcome] });
+    return i.editReply({ embeds: [welcome] });
   }
   await i.editReply({ embeds: [welcome] });
   const blocks = await attachmentToBlocks(rubric);

@@ -8,6 +8,7 @@ import { log } from './core/log';
 import { healthHandler } from './core/health';
 import { commandJson } from './discord/commands';
 import { handleInteraction } from './discord/interactions';
+import { checkInteractionRouting } from './discord/interaction-routing';
 import { handleMessage } from './discord/messages';
 import { dm, sendToProject } from './discord/deliver';
 import { startScheduler } from './scheduler/reminders';
@@ -59,6 +60,18 @@ async function main() {
   };
 
   client.once(Events.ClientReady, c => track(async () => {
+    try {
+      checkInteractionRouting(await c.application.fetch());
+    } catch (error) {
+      const message = error instanceof Error && error.message.startsWith('Slash commands are routed')
+        ? error.message : 'Could not verify Discord slash-command delivery. Check the bot application permissions and reconnect.';
+      if (process.env.TESSERACT_BRIDGE_TOKEN) process.stdout.write(`TESSERACT_ERROR ${message}\n`);
+      else log.error(message);
+      c.destroy();
+      closeDb();
+      process.exitCode = 1;
+      return;
+    }
     log.info(`logged in as ${c.user.tag} — in ${c.guilds.cache.size} server(s)`);
     c.user.setActivity('your group project', { type: ActivityType.Watching });
     // Guild-scoped registration is instant, so every server the bot is in gets commands on boot.

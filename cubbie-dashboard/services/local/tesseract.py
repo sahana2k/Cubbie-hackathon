@@ -38,12 +38,13 @@ class Tesseract:
 
     def connect(self, data):
         with self.lock:
+            restart = data.get('restart') is True
             previous = self.credentials
-            candidate = {**self.metadata, **data}
+            candidate = {**self.metadata, **{k: v for k, v in data.items() if k != 'restart'}}
             for key in ('apiKey', 'botToken'):
                 if not candidate.get(key) and previous:
                     candidate[key] = previous[key]
-            if previous == candidate and self.settings()['connected']:
+            if not restart and previous == candidate and self.settings()['connected']:
                 return self.request('/servers')
             try:
                 result = self._connect(candidate)

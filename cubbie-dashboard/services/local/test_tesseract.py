@@ -19,6 +19,21 @@ class TesseractTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Connect your Discord'):
             self.bridge.request('/snapshot')
 
+    def test_explicit_restart_reuses_credentials_without_exposing_or_persisting_them(self):
+        data = {'provider': 'anthropic', 'model': 'fixture-model', 'guildId': '12345', 'baseUrl': '',
+                'botToken': 'private-bot-fixture', 'apiKey': 'private-model-fixture'}
+        servers = {'servers': [{'id': '12345', 'name': 'Fixture'}]}
+        with patch.object(self.bridge, '_connect', return_value=servers) as start, patch.object(self.bridge, 'settings', return_value={'connected': True}), patch.object(self.bridge, 'request', return_value=servers):
+            self.bridge.connect(data)
+            self.bridge.connect({})
+            self.assertEqual(start.call_count, 1)
+            self.bridge.connect({'restart': True})
+            self.assertEqual(start.call_count, 2)
+            self.assertEqual(start.call_args.args[0], data)
+        saved = (self.root / 'tesseract-settings.json').read_text()
+        self.assertNotIn('private-bot-fixture', saved)
+        self.assertNotIn('private-model-fixture', saved)
+
     def test_missing_entry_is_built_for_direct_python_start(self):
         service = self.root / 'services/tesseract'
         (service / 'node_modules').mkdir(parents=True)

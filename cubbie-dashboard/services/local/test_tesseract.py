@@ -1,5 +1,7 @@
 import tempfile
 import unittest
+from unittest.mock import patch, Mock
+from urllib.error import HTTPError
 from pathlib import Path
 from tesseract import Tesseract
 
@@ -17,6 +19,51 @@ class TesseractTests(unittest.TestCase):
     def test_unconnected_bridge_does_not_proxy(self):
         with self.assertRaisesRegex(ValueError, 'Connect your Discord'):
             self.bridge.request('/snapshot')
+
+    def test_remote_connection_needs_no_local_build_and_does_not_save_key(self):
+        servers = {'servers': [{'id': '12345', 'name': 'Project team'}]}
+        with patch.object(self.bridge, 'remote_get', return_value=servers) as read, patch('tesseract.subprocess.Popen') as spawn:
+            self.assertEqual(self.bridge.connect({'remoteUrl': 'https://remote.example', 'remoteToken': 'private-bridge-key'}), servers)
+            self.assertTrue(self.bridge.settings()['connected'])
+            spawn.assert_not_called()
+            self.bridge.request('/channels?guild=12345')
+            read.assert_called_with('https://remote.example', 'private-bridge-key', '/channels?guild=12345')
+        self.assertNotIn('private-bridge-key', (self.root / 'tesseract-settings.json').read_text())
+        self.assertNotIn('private-bridge-key', str(self.bridge.settings()))
+        restored = Tesseract(self.root, self.root)
+        self.assertFalse(restored.settings()['connected'])
+        self.assertFalse(restored.settings()['hasCredentials'])
+
+    def test_failed_remote_edit_keeps_working_connection_and_never_reuses_key_off_origin(self):
+        with patch.object(self.bridge, 'remote_get', return_value={'servers': [{'id': '12345', 'name': 'Team'}]}):
+            self.bridge.connect({'remoteUrl': 'https://original.example', 'remoteToken': 'private-key'})
+        with patch.object(self.bridge, 'remote_get', side_effect=ValueError('Unavailable')) as read:
+            with self.assertRaisesRegex(ValueError, 'connection key'):
+                self.bridge.connect({'remoteUrl': 'https://other.example', 'remoteToken': ''})
+            read.assert_not_called()
+            with self.assertRaisesRegex(ValueError, 'Unavailable'):
+                self.bridge.connect({'remoteUrl': 'https://other.example', 'remoteToken': 'new-key'})
+        self.assertEqual(self.bridge.remote_url, 'https://original.example')
+        self.assertEqual(self.bridge.remote_token, 'private-key')
+        self.assertTrue(self.bridge.settings()['connected'])
+
+    def test_remote_origin_supports_https_or_tunnel_and_restricts_reads(self):
+        self.assertEqual(Tesseract.remote_origin('http://127.0.0.1:8791/'), 'http://127.0.0.1:8791')
+        for url in ('http://remote.example', 'https://user:secret@remote.example', 'https://remote.example?token=x', 'https://remote.example/path'):
+            with self.subTest(url=url), self.assertRaises(ValueError):
+                Tesseract.remote_origin(url)
+        for path in ('https://evil.example/servers', '/connect', '/disconnect', '/messages?guild=12345&channel=67890&token=x', '/snapshot?guild=12345'):
+            with self.subTest(path=path), self.assertRaises(ValueError):
+                Tesseract.remote_path(path)
+        self.assertEqual(Tesseract.remote_path('/snapshot?guild=12345&channel=67890'), '/snapshot?guild=12345&channel=67890')
+
+    def test_remote_redirect_and_auth_errors_do_not_echo_keys(self):
+        for code in (302, 401):
+            opener = Mock()
+            opener.open.side_effect = HTTPError('https://remote.example', code, 'private-key', {}, None)
+            with patch('tesseract.build_opener', return_value=opener), self.assertRaises(ValueError) as error:
+                Tesseract.remote_get('https://remote.example', 'private-key', '/servers')
+            self.assertNotIn('private-key', str(error.exception))
 
     def test_rejects_missing_credentials_without_writing_secrets(self):
         with self.assertRaises(ValueError):

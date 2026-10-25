@@ -7,7 +7,7 @@ import { TesseractInvite } from './TesseractInvite';
 import { DiscordText } from './DiscordText';
 import type { Names } from '../lib/discordMarkdown';
 
-type ConnectionSettings = { guildId?: string; provider?: string; model?: string; baseUrl?: string; connected?: boolean; hasCredentials?: boolean };
+type ConnectionSettings = { remoteUrl?: string; guildId?: string; provider?: string; model?: string; baseUrl?: string; connected?: boolean; hasCredentials?: boolean };
 function savedChannel(guild: string) { try { return localStorage.getItem(`tesseract.channel.${guild}`) || ''; } catch { return ''; } }
 type Named = { id: string; name: string };
 type ProjectTask = { id: number; title: string; description: string | null; owner_id: string | null; status: string; due_at: number | null };
@@ -56,17 +56,12 @@ export function TesseractWorkspace({ query, setupOnly = false }: { query: string
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [provider, setProvider] = useState('anthropic');
-  const [model, setModel] = useState('');
-  const [baseUrl, setBaseUrl] = useState('');
-  const [botToken, setBotToken] = useState('');
-  const [apiKey, setApiKey] = useState('');
-  const [guildInput, setGuildInput] = useState('');
+  const [remoteUrl, setRemoteUrl] = useState('');
+  const [remoteToken, setRemoteToken] = useState('');
   const [savedSettings, setSavedSettings] = useState<ConnectionSettings>({});
   const [hasCredentials, setHasCredentials] = useState(false);
   const applySettings = (value: ConnectionSettings) => {
-    setGuildInput(value.guildId || ''); setProvider(value.provider || 'anthropic');
-    setModel(value.model || ''); setBaseUrl(value.baseUrl || ''); setApiKey(''); setBotToken('');
+    setRemoteUrl(value.remoteUrl || ''); setRemoteToken('');
   };
   const openSettings = () => { applySettings(savedSettings); setSettings(true); setSetupOpen(true); };
   const selectChannel = (id: string) => {
@@ -145,13 +140,13 @@ export function TesseractWorkspace({ query, setupOnly = false }: { query: string
   async function connect() {
     setBusy(true); setError('');
     try {
-      const result = await request<{ servers: Named[] }>('/connect', { provider, model, baseUrl, botToken, apiKey, guildId: guildInput });
-      const saved: ConnectionSettings = { guildId: guildInput, provider, model, baseUrl, connected: true, hasCredentials: true };
+      const result = await request<{ servers: Named[] }>('/connect', { remoteUrl, remoteToken });
+      const saved: ConnectionSettings = { remoteUrl, guildId: result.servers[0]?.id, connected: true, hasCredentials: true };
       setSavedSettings(saved); setHasCredentials(true);
       setServers(result.servers);
       setGuild(result.servers[0]?.id || ''); setRevision(r => r + 1); setSettings(false); setSetupOpen(false);
     } catch (e) { setError((e as Error).message); }
-    finally { setBusy(false); setApiKey(''); setBotToken(''); }
+    finally { setBusy(false); setRemoteToken(''); }
   }
   async function disconnect() {
     setBusy(true);
@@ -201,15 +196,11 @@ export function TesseractWorkspace({ query, setupOnly = false }: { query: string
     {error && <p className="error" role="alert">{error}</p>}
     {!loading && settings && config().localApi && <form className="set-card ts-connect" onSubmit={e => { e.preventDefault(); void connect(); }}>
       <header><h3>{connected ? 'Discord connection' : 'Connect your project'}</h3>{connected && <button type="button" className="ghost" onClick={() => setSettings(false)}>Back to board</button>}</header>
-      <p>Add your Discord bot and choose the model that runs Tesseract.</p>
-      <ol className="steps"><li>Create a bot in the <a href="https://discord.com/developers/applications" target="_blank" rel="noreferrer">Discord Developer Portal</a>. Enable Message Content and Server Members intents.</li><li>Install it in your server with the bot and applications.commands scopes and View Channels, Read Message History, Send Messages, Embed Links and Attach Files permissions.</li><li>Create a #tesseract-log channel the bot can write to. Copy the server ID (Discord Developer Mode), then enter your credentials below.</li></ol>
-      <div className="field-grid"><label className="field">Server ID<input required value={guildInput} onChange={e => setGuildInput(e.target.value)} inputMode="numeric" placeholder="Your Discord server ID" /></label><label className="field">Discord bot token<input required={!hasCredentials} type="password" autoComplete="off" value={botToken} onChange={e => setBotToken(e.target.value)} placeholder={hasCredentials ? "Saved — leave blank to keep" : "Bot token, not your personal token"} /></label></div>
-      <div className="field-grid"><label className="field">LLM provider<select value={provider} onChange={e => setProvider(e.target.value)}><option value="anthropic">Anthropic / Claude</option><option value="openai">OpenAI</option><option value="gemini">Google Gemini</option><option value="groq">Groq</option><option value="openrouter">OpenRouter</option><option value="custom">Other compatible provider</option></select></label><label className="field">Model ID<input required value={model} onChange={e => setModel(e.target.value)} placeholder="Exact model ID from your provider" /></label></div>
-      {provider === 'custom' && <label className="field">API base URL<input required type="url" value={baseUrl} onChange={e => setBaseUrl(e.target.value)} placeholder="https://your-provider.example/v1" /></label>}
-      <label className="field">Provider API key<input required={!hasCredentials} type="password" autoComplete="off" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder={hasCredentials ? "Saved — leave blank to keep" : "Your provider’s API key"} /></label>
-      <p className="fine">Opening settings does not change the connection. Server ID, provider and model are saved locally. Leave secret fields blank to keep their current values. Secrets stay in server memory and need re-entry only after the server stops. Use a model with tool calling; PDF/image support depends on your provider. Discord bots connect to server channels, not personal group DMs.</p>
-      <div className="row"><button className="primary" disabled={busy || !config().localApi}>{busy ? 'Saving…' : connected ? 'Save changes' : 'Connect Discord + LLM'}</button>{connected && <button className="ghost" type="button" disabled={busy} onClick={() => void disconnect()}>Disconnect</button>}</div>
-      {!config().localApi && <p className="fine">Start the local dashboard with <code>corepack pnpm live</code> to enable this connection.</p>}
+      <p>Connect the Tesseract service you already run. Your Discord bot and AI model stay on that server.</p>
+      <label className="field">Tesseract service URL<input required type="url" value={remoteUrl} onChange={e => setRemoteUrl(e.target.value)} placeholder="https://your-tesseract-service.example" /></label>
+      <label className="field">Service connection key<input required={!hasCredentials} type="password" autoComplete="off" value={remoteToken} onChange={e => setRemoteToken(e.target.value)} placeholder={hasCredentials ? 'Connected — leave blank to keep' : 'The remote Tesseract bridge key'} /></label>
+      <p className="fine">Use the running service’s dashboard API address, or a localhost address forwarded through an SSH tunnel. The connection key stays in memory on this Mac. You do not need to build Tesseract here or create another Discord application.</p>
+      <div className="row"><button className="primary" disabled={busy}>{busy ? 'Connecting…' : 'Connect Tesseract'}</button>{connected && <button className="ghost" type="button" disabled={busy} onClick={() => void disconnect()}>Disconnect</button>}</div>
     </form>}
     </SetupDialog>}
     {connected && !setupOnly && <>

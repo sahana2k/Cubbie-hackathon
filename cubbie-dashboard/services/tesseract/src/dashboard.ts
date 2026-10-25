@@ -26,14 +26,23 @@ export function startDashboard(client: Client) {
       if (!guild) return reply(404, { message: 'Choose a connected server.' });
       const channelCollection = url.pathname === '/channels' ? await guild.channels.fetch() : guild.channels.cache;
       const channels = [...channelCollection.values()].filter(c => c?.isTextBased() && c.viewable);
-      if (url.pathname === '/channels') return reply(200, { channels: channels.map(c => ({ id: c!.id, name: c!.name })) });
+      if (url.pathname === '/channels') return reply(200, { channels: channels.map(c => {
+        const project = projectForChannel(c!);
+        return { id: c!.id, name: c!.name, project: project ? { name: project.name,
+          activeTasks: repo.listTasks(project.id).filter(t => !['done', 'declined'].includes(t.status)).length } : null };
+      }) });
       const channel = channels.find(c => c?.id === url.searchParams.get('channel'));
       if (!channel || !channel.isTextBased()) return reply(404, { message: 'Channel is unavailable to this bot.' });
       if (url.pathname === '/snapshot') {
         const project = projectForChannel(channel);
+        const tasks = project ? repo.listTasks(project.id) : [];
+        const members = project ? repo.listMembers(project.id).map(m => ({ id: m.discord_id, name: m.display_name })) : [];
+        const missingOwners = [...new Set(tasks.map(t => t.owner_id).filter((id): id is string => !!id && !members.some(m => m.id === id)))];
+        const uncached = missingOwners.filter(id => !guild.members.cache.has(id));
+        if (uncached.length) await guild.members.fetch({ user: uncached }).catch(() => undefined);
+        for (const id of missingOwners) members.push({ id, name: guild.members.cache.get(id)?.displayName || client.users.cache.get(id)?.username || 'Discord teammate' });
         return reply(200, { project: project ? { id: project.id, name: project.name, final_deadline: project.final_deadline, submitted_at: project.submitted_at } : null,
-          members: project ? repo.listMembers(project.id).map(m => ({ id: m.discord_id, name: m.display_name })) : [],
-          tasks: project ? repo.listTasks(project.id) : [], dependencies: project ? repo.listDependencies(project.id) : [],
+          members, tasks, dependencies: project ? repo.listDependencies(project.id) : [],
           meetings: project ? repo.listMeetings(project.id) : [],
           decisions: project ? repo.listDecisions(project.id, 'pending').map(d => ({ id: d.id, summary: d.summary, conflicts: d.conflicts, required_approvers: d.required_approvers, approvals: d.approvals, message_id: d.message_id })) : [],
           requirements: project ? repo.listRequirements(project.id) : [] });

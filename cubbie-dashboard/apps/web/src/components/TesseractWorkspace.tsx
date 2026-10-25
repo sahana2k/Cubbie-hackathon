@@ -1,5 +1,6 @@
+import { discordDemoSnapshot, discordDemoFeed } from '../data/discordDemo';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import { activeProjectTasks } from '../lib/projectTasks';
+import { defaultProjectChannel, projectTaskColumns, type ProjectChannel } from '../lib/projectTasks';
 import { createPortal } from 'react-dom';
 import { config } from '../config';
 import { SetupDialog } from './SetupDialog';
@@ -10,7 +11,7 @@ import type { Names } from '../lib/discordMarkdown';
 type ConnectionSettings = { guildId?: string; provider?: string; model?: string; baseUrl?: string; connected?: boolean; hasCredentials?: boolean };
 function savedChannel(guild: string) { try { return localStorage.getItem(`tesseract.channel.${guild}`) || ''; } catch { return ''; } }
 type Named = { id: string; name: string };
-type ProjectTask = { id: number; title: string; description: string | null; owner_id: string | null; status: string; due_at: number | null };
+type ProjectTask = { id: number; title: string; description: string | null; owner_id: string | null; status: string; due_at: number | null; source_url?: string | null };
 type Snapshot = {
   project: { id: number; name: string; final_deadline: number | null; submitted_at: number | null } | null;
   members: Named[]; tasks: ProjectTask[];
@@ -37,17 +38,18 @@ const date = (value: number) => new Date(value).toLocaleString([], { month: 'sho
 const labels: Record<string, string> = { proposed: 'Awaiting approval', confirmed: 'To do', in_progress: 'In progress', blocked: 'Blocked', done: 'Done', overdue: 'Overdue', declined: 'Declined' };
 
 export function TesseractWorkspace({ query, setupOnly = false }: { query: string; setupOnly?: boolean }) {
+  const [demo, setDemo] = useState(!setupOnly);
   const refreshRef = useRef<(() => Promise<void>) | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [syncedAt, setSyncedAt] = useState<number | null>(null);
   const [syncError, setSyncError] = useState('');
   const [revision, setRevision] = useState(0);
   const [servers, setServers] = useState<Named[]>([]);
-  const [channels, setChannels] = useState<Named[]>([]);
+  const [channels, setChannels] = useState<ProjectChannel[]>([]);
   const [guild, setGuild] = useState('');
   const [channel, setChannel] = useState('');
-  const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
-  const [feed, setFeed] = useState<Feed | null>(null);
+  const [liveSnapshot, setSnapshot] = useState<Snapshot | null>(null);
+  const [liveFeed, setFeed] = useState<Feed | null>(null);
   const [feedError, setFeedError] = useState('');
   const feedRef = useRef<HTMLDivElement>(null);
   const stickRef = useRef(true);
@@ -95,9 +97,9 @@ export function TesseractWorkspace({ query, setupOnly = false }: { query: string
     setChannels([]); setChannel(''); setSnapshot(null);
     if (!guild) return;
     let active = true;
-    request<{ channels: Named[] }>(`/channels?guild=${encodeURIComponent(guild)}`).then(result => {
+    request<{ channels: ProjectChannel[] }>(`/channels?guild=${encodeURIComponent(guild)}`).then(result => {
       if (!active) return;
-      setChannels(result.channels); setChannel(result.channels.find(c => c.id === savedChannel(guild))?.id || result.channels[0]?.id || '');
+      setChannels(result.channels); setChannel(defaultProjectChannel(result.channels, savedChannel(guild)));
     }).catch(e => { if (active) setError(e.message); });
     return () => { active = false; };
   }, [guild, revision]);
@@ -141,7 +143,7 @@ export function TesseractWorkspace({ query, setupOnly = false }: { query: string
     // Follow new messages unless the user has scrolled up to read history.
     const el = feedRef.current;
     if (el && stickRef.current) el.scrollTop = el.scrollHeight;
-  }, [feed]);
+  }, [liveFeed, demo]);
   async function connect() {
     setBusy(true); setError('');
     try {
@@ -159,20 +161,21 @@ export function TesseractWorkspace({ query, setupOnly = false }: { query: string
     catch (e) { setError((e as Error).message); return false; }
     finally { setBusy(false); }
   }
-  const members = [...(snapshot?.members || [])];
-  for (const task of snapshot?.tasks || []) if (task.owner_id && !members.some(m => m.id === task.owner_id)) members.push({ id: task.owner_id, name: task.owner_id });
-  const columns = [...members, { id: '', name: 'Unassigned' }];
-  const filtered = activeProjectTasks(snapshot?.tasks || []).filter(t => `${t.title} ${t.description || ''} ${members.find(m => m.id === t.owner_id)?.name || ''}`.toLowerCase().includes(query.toLowerCase()));
+  const snapshot: Snapshot | null = demo ? discordDemoSnapshot : liveSnapshot;
+  const feed: Feed | null = demo ? discordDemoFeed : liveFeed;
+  const members = snapshot?.members || [];
+  const columns = projectTaskColumns(snapshot?.tasks || [], members, query, true);
 
   return <>
     {portal && !setupOnly && createPortal(<>
-      <header className="ts-chat-head"><div className="dc-av">T</div><div><strong>Tesseract</strong><small>{connected ? 'Your Discord project teammate' : 'Connect your project group'}</small></div><div className="ts-chat-actions"><button className="ghost" type="button" disabled={refreshing || !guild || !channel} onClick={() => void refreshRef.current?.()} aria-label="Refresh task board" title="Refresh task board">{refreshing ? 'Syncing…' : '↻ Refresh'}</button><button type="button" className="ghost" onClick={() => settings ? setSettings(false) : openSettings()} aria-label="Discord connection settings">⚙</button></div></header>
-      {connected && <p className="ts-sync-status" role="status">{syncError ? `Sync failed: ${syncError}` : refreshing ? 'Syncing task board…' : syncedAt ? `Board synced at ${new Date(syncedAt).toLocaleTimeString()}` : 'Waiting to sync…'}</p>}
-      {connected && <div className="ts-selectors"><label className="field">Server<select aria-label="Discord server" value={guild} onChange={e => setGuild(e.target.value)}>{servers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label><label className="field">Channel<select aria-label="Discord channel" value={channel} onChange={e => selectChannel(e.target.value)}>{channels.map(c => <option key={c.id} value={c.id}># {c.name}</option>)}</select></label></div>}
-      {connected ? <>
+      <header className="ts-chat-head"><div className="dc-av">T</div><div><strong>Tesseract</strong><small>{demo ? 'Demo project teammate' : connected ? 'Your Discord project teammate' : 'Connect your project group'}</small></div><div className="ts-chat-actions"><button className="ghost" type="button" disabled={demo || refreshing || !guild || !channel} onClick={() => void refreshRef.current?.()} aria-label="Refresh task board" title="Refresh task board">{refreshing ? 'Syncing…' : '↻ Refresh'}</button><button type="button" className="ghost" onClick={() => settings ? setSettings(false) : openSettings()} aria-label="Discord connection settings">⚙</button></div></header>
+      <div className="ts-demo-controls"><span>{demo ? 'Demo · Oct 25, 2026 · MST' : 'Live Discord'}</span><button type="button" className="ghost" onClick={() => setDemo(value => !value)}>{demo ? 'Show live Discord' : 'Show demo'}</button></div>
+      {!demo && connected && <p className="ts-sync-status" role="status">{syncError ? `Sync failed: ${syncError}` : refreshing ? 'Syncing task board…' : syncedAt ? `Board synced at ${new Date(syncedAt).toLocaleTimeString()}` : 'Waiting to sync…'}</p>}
+      {!demo && connected && <div className="ts-selectors"><label className="field">Server<select aria-label="Discord server" value={guild} onChange={e => setGuild(e.target.value)}>{servers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label><label className="field">Channel<select aria-label="Discord channel" value={channel} onChange={e => selectChannel(e.target.value)}>{channels.map(c => <option key={c.id} value={c.id}># {c.name}{c.project ? ` · ${c.project.name}` : ''}</option>)}</select></label></div>}
+      {demo || connected ? <>
         <div className="ts-messages" ref={feedRef} aria-live="polite" aria-label="Latest Discord messages"
           onScroll={e => { const el = e.currentTarget; stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60; }}>
-          {feedError ? <p className="ts-chat-empty">Couldn’t load messages: {feedError}</p>
+          {!demo && feedError ? <p className="ts-chat-empty">Couldn’t load messages: {feedError}</p>
             : !feed ? <p className="ts-chat-empty">Loading messages…</p>
             : !feed.messages.length ? <p className="ts-chat-empty">No messages in this channel yet.</p>
             : feed.messages.map((m, i) => { const grouped = continues(feed.messages[i - 1], m); return <article key={m.id} className={`ts-message${grouped ? ' ts-grouped' : ''}`}>
@@ -187,16 +190,16 @@ export function TesseractWorkspace({ query, setupOnly = false }: { query: string
                   {e.footer && <p className="dm-sub">{e.footer}</p>}
                 </div>)}
                 {m.attachments.map(a => <a key={a.url} className="ts-attachment" href={a.url} target="_blank" rel="noreferrer">📎 {a.name}</a>)}
-                <a className="ts-jump" href={m.url} target="_blank" rel="noreferrer" aria-label={`Open message from ${m.author} in Discord`} title="Open in Discord">↗</a>
+                {m.url && <a className="ts-jump" href={m.url} target="_blank" rel="noreferrer" aria-label={`Open message from ${m.author} in Discord`} title="Open in Discord">↗</a>}
               </div>
             </article>; })}
         </div>
-        <div className="ts-chat-foot"><p className="fine">Read-only view. Reply, upload and approve in Discord.</p><a className="primary" href={discordUrl} target="_blank" rel="noreferrer">Message in Discord ↗</a></div>
+        <div className="ts-chat-foot">{demo ? <p className="fine">Demo preview using your supplied update. No messages are sent.</p> : <><p className="fine">Read-only view. Reply, upload and approve in Discord.</p><a className="primary" href={discordUrl} target="_blank" rel="noreferrer">Message in Discord ↗</a></>}</div>
       </> : null}
     </>, portal)}
-    {error && !setupOpen && connected && <p className="error" role="alert">{error}</p>}
-    {loading && <p>Loading Discord connection…</p>}
-    {(!loading || setupOnly) && (!connected || setupOnly) && <TesseractInvite onJoin={openSettings} />}
+    {!demo && error && !setupOpen && connected && <p className="error" role="alert">{error}</p>}
+    {!demo && loading && <p>Loading Discord connection…</p>}
+    {(!demo || setupOnly) && (!loading || setupOnly) && (!connected || setupOnly) && <TesseractInvite onJoin={openSettings} />}
     {setupOpen && <SetupDialog onClose={() => { setSetupOpen(false); if (connected) setSettings(false); }} onDelete={connected && config().localApi ? () => { if (window.confirm('Disconnect Tesseract? Your project data will be kept.')) void disconnect().then(ok => { if (ok) setSetupOpen(false); }); } : undefined}>
     {error && <p className="error" role="alert">{error}</p>}
     {!loading && settings && config().localApi && <form className="set-card ts-connect" onSubmit={e => { e.preventDefault(); void connect(); }}>
@@ -211,16 +214,18 @@ export function TesseractWorkspace({ query, setupOnly = false }: { query: string
 
     </form>}
     </SetupDialog>}
-    {connected && !setupOnly && <>
+    {(demo || connected) && !setupOnly && <>
       <div className="ts-toolbar"><div><strong>{snapshot?.project?.name || 'Your project board'}</strong><span className="fine"> {snapshot?.project?.submitted_at ? '· Submission confirmed' : snapshot?.project?.final_deadline ? `· Due ${date(snapshot.project.final_deadline)}` : '· Tasks grouped by teammate'}</span></div><button className="ghost" onClick={openSettings}>Connection settings</button></div>
       {snapshot && !snapshot.project && <div className="local-notice">Run <strong>/setup</strong> in this Discord channel, then ask everyone to <strong>/join</strong>. Upload the assignment with <strong>/rubric</strong> to create your claim board.</div>}
       {!snapshot && <p role="status">Loading project tasks…</p>}
-      {snapshot && <div className="ts-board" style={{ '--cols': Math.max(columns.length, 1) } as CSSProperties}>
-        {columns.map((person, i) => { const tasks = filtered.filter(t => (t.owner_id || '') === person.id); return <section key={person.id} className={`ts-column ts-tone-${i % 4}`} aria-label={`${person.name} tasks`}><header><div className="ts-person">{person.name[0]?.toUpperCase() || '?'}</div><div><h3>{person.name} <span>{tasks.length}</span></h3><p>{tasks.filter(t => !['done', 'declined', 'proposed'].includes(t.status)).length} active</p></div></header><div className="ts-cards">{tasks.map(t => { const blockers = snapshot?.dependencies.filter(d => d.dependent_task_id === t.id && d.state === 'active') || []; return <article key={t.id} className="ts-card"><span className={`ts-status ts-status-${t.status}`}>{labels[t.status] || t.status}</span><h4>{t.title}</h4>{t.description && <p>{t.description}</p>}{blockers.length > 0 && <p className="ts-blocked">Waiting on {blockers.map(d => snapshot?.tasks.find(x => x.id === d.blocking_task_id)?.title || `task #${d.blocking_task_id}`).join(', ')}</p>}<footer>{t.due_at ? <time className={t.status !== 'done' && t.due_at < Date.now() ? 'ts-late' : ''}>{date(t.due_at)}</time> : <span>No deadline</span>}<a href={discordUrl} target="_blank" rel="noreferrer">#{t.id} ↗</a></footer></article>; })}{!tasks.length && <p className="ts-no-tasks">{query ? 'No matching tasks' : person.id ? 'No active tasks' : 'Unclaimed rubric tasks appear here'}</p>}</div></section>; })}
+      {snapshot?.project && !columns.length && <p className="local-notice" role="status">{query ? 'No tasks match your search.' : 'No active assignments in this project. Confirm or claim tasks in Discord; they will appear here automatically.'}</p>}
+      {snapshot?.project && columns.length > 0 && <div className="ts-board" style={{ '--cols': columns.length } as CSSProperties}>
+        {columns.map((person, i) => { const tasks = person.tasks; return <section key={person.id} className={`ts-column ts-tone-${i % 4}`} aria-label={`${person.name} tasks`}><header><div className="ts-person">{person.name[0]?.toUpperCase() || '?'}</div><div><h3>{person.name} <span>{tasks.length}</span></h3><p>{tasks.filter(t => !['done', 'declined', 'proposed'].includes(t.status)).length} active</p></div></header><div className="ts-cards">{tasks.map(t => { const blockers = snapshot?.dependencies.filter(d => d.dependent_task_id === t.id && d.state === 'active') || []; return <article key={t.id} className="ts-card"><span className={`ts-status ts-status-${t.status}`}>{labels[t.status] || t.status}</span><h4>{t.title}</h4>{t.description && <p>{t.description}</p>}{blockers.length > 0 && <p className="ts-blocked">Waiting on {blockers.map(d => snapshot?.tasks.find(x => x.id === d.blocking_task_id)?.title || `task #${d.blocking_task_id}`).join(', ')}</p>}<footer>{t.due_at ? <time className={!demo && t.status !== 'done' && t.due_at < Date.now() ? 'ts-late' : ''}>{date(t.due_at)}</time> : <span>No deadline</span>}{demo ? <span>#{t.id}</span> : <a href={t.source_url || discordUrl} target="_blank" rel="noreferrer" aria-label={`Open task ${t.title} in Discord`}>#{t.id} ↗</a>}</footer></article>; })}{!tasks.length && <p className="ts-no-tasks">{query ? 'No matching tasks' : person.id ? 'No active tasks' : 'Unclaimed rubric tasks appear here'}</p>}</div></section>; })}
       </div>}
       {!!snapshot?.decisions.length && <section className="ts-details"><h3>Waiting for approval</h3>{snapshot.decisions.map(d => <article key={d.id}><strong>{d.summary}</strong><p>{d.approvals.length} of {d.required_approvers.length} approvals · {d.required_approvers.filter(id => !d.approvals.includes(id)).map(id => members.find(m => m.id === id)?.name || id).join(', ')}</p>{d.conflicts.map((c, i) => <p key={i} className="ts-blocked">{c}</p>)}<a href={d.message_id ? `${discordUrl}/${d.message_id}` : discordUrl} target="_blank" rel="noreferrer">Review in Discord ↗</a></article>)}</section>}
       {!!snapshot?.meetings.length && <details className="ts-details"><summary>Meetings · {snapshot.meetings.length}</summary>{snapshot.meetings.map(m => <p key={m.id}>{m.title} · {m.status}{m.confirmed_start ? ` · ${date(m.confirmed_start)}` : ''}</p>)}</details>}
       {!!snapshot?.requirements.length && <details className="ts-details"><summary>Rubric · {snapshot.requirements.length} requirements</summary>{snapshot.requirements.map(r => <p key={r.id}>{r.title}{r.points != null ? ` · ${r.points} pts` : ''}</p>)}</details>}
+      {demo && <details className="ts-details"><summary>Completed · 1</summary><p>Yash · #4 Team Contract · Done</p></details>}
       <p className="fine ts-hint">Use /meet for scheduling, /classes for private availability, /rescue for help, and /submitted to confirm submission. Agent activity appears in #tesseract-log.</p>
     </>}
   </>;

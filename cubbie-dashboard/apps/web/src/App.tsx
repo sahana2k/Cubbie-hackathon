@@ -113,7 +113,7 @@ export default function App() {
 
   return (
     <div className={`app pane-${pane}`}>
-      <TopBar view={view} onView={v => { setView(v); setPane("board"); }} query={query} onQuery={setQuery} status={status}
+      <TopBar view={view} onView={v => { if (tab === "discord") return; setView(v); setPane("board"); }} query={query} onQuery={setQuery} status={status}
         theme={theme} onTheme={() => setTheme(t => (t === "dark" ? "light" : "dark"))} pane={pane} onPane={setPane}
         graderAvailable={graderAvailable} settingsOpen={tab === "settings"} onSettings={() => { setTab(t => t === "settings" ? "board" : "settings"); setPane("board"); }}
         discordOpen={tab === "discord"} onDiscord={() => { setTab(t => t === "discord" ? "board" : "discord"); setPane("board"); }}
@@ -149,7 +149,7 @@ export default function App() {
             )}
             {tab === "week" && <WeekView tasks={visible} onOpen={setOpenId} />}
             {tab === "discord" && <TesseractWorkspace query={query} />}
-            {tab === "settings" && <Settings api={api} status={status} onError={setError} onJoin={() => { setTab("board"); const url = new URL(location.href); url.searchParams.delete("connections"); url.searchParams.set("dashboard", "1"); history.replaceState(null, "", url); }} />}
+            {tab === "settings" && <Settings api={api} status={status} onError={setError} onJoin={() => { setTab("board"); setPane("board"); setQuery(""); const url = new URL(location.href); url.searchParams.delete("connections"); url.searchParams.set("dashboard", "1"); history.replaceState(null, "", url); }} />}
           </div>
         </section>
       </main>

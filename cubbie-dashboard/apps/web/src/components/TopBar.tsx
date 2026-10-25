@@ -25,7 +25,7 @@ export function TopBar({ view, onView, query, onQuery, status, theme, onTheme, p
 
       <nav className="view-switch" aria-label="Dashboard view">
         {VIEW_ORDER.map(v => (
-          <button key={v} disabled={v === "grader" && !graderAvailable} title={v === "grader" && !graderAvailable ? "No TA/Grader role is available in Canvas settings" : undefined} className={v === view ? "on" : ""} aria-pressed={v === view} onClick={() => onView(v)}>
+          <button key={v} disabled={discordOpen || (v === "grader" && !graderAvailable)} title={discordOpen ? "Turn Discord off to use this dashboard" : v === "grader" && !graderAvailable ? "No TA/Grader role is available in Canvas settings" : undefined} className={!discordOpen && v === view ? "on" : ""} aria-pressed={!discordOpen && v === view} onClick={() => onView(v)}>
             <Icon name={v} /><span className="long">{VIEWS[v].label}</span><span className="short">{VIEWS[v].short}</span>
           </button>
         ))}

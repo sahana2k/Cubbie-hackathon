@@ -82,17 +82,22 @@ export function LocalConnections({ local, status, onError }: {
       {status?.canvas?.error && <p className="error">{status.canvas.error}</p>}
       </div>
     </details>
-    <section className="reach-cubbie" aria-labelledby="reach-cubbie-title">
-      <div className="message-sync-row"><span id="reach-cubbie-title">iMessage</span>{handle && <small>{handle}</small>}
-        <button className="phone-sync" aria-label="Sync Cubbie number" disabled={busy !== null} onClick={() => void run('messages', async () => {
+    <section className="set-card imessage-account" aria-labelledby="reach-cubbie-title">
+      <div className="imessage-account-head">
+        <div className="account-title"><span className="account-logo imessage-logo" aria-hidden="true" /><div><h3 id="reach-cubbie-title">iMessage</h3><p>Your conversation with Cubbie</p></div></div>
+        <span className={`pill ${status?.imessageRelay === 'online' ? 'ok' : 'warn'}`}><i />{status?.imessageRelay === 'online' ? 'Connected' : 'Not connected'}</span>
+      </div>
+      <p className="fine">Sync your Cubbie conversation from Messages on this Mac.</p>
+      {handle && <p className="imessage-handle">{handle}</p>}
+      <div className="imessage-sync-actions">
+        <button type="button" className="primary imessage-sync-button" disabled={busy !== null} aria-busy={busy === 'messages'} onClick={() => void run('messages', async () => {
           const value = await local.syncMessages(); setConnection(value); setHandle(value.handle); setCandidates(value.candidates || []);
           setNotice(value.candidates?.length ? 'Choose your Cubbie conversation below.' : 'Cubbie conversation synced.');
-        })}>{busy === 'messages' ? 'Syncing…' : '↻ Sync'}</button>
+        })}><span aria-hidden="true">↻</span>{busy === 'messages' ? 'Syncing…' : 'Sync iMessage'}</button>
+        <span className="fine">{status?.imessageRelay === 'online' ? 'Refresh your connected conversation' : 'Find and connect your Cubbie thread'}</span>
       </div>
       {candidates.map(candidate => <button className="ghost" key={candidate} onClick={() => void run('messages', async () => { const value = await local.syncMessages(candidate); setConnection(value); setHandle(value.handle); setCandidates([]); setNotice('Cubbie conversation linked.'); })}>{candidate}</button>)}
       {status?.imessageError && <p className="error" role="alert">{status.imessageError}</p>}
-      <p className="fine">Job list: when Cubbie sends your applications workbook (cubboard-jobs-…xlsx) in this thread, Job hunt updates automatically. Rejected applications are left out.</p>
-      {status?.jobs?.lastImport && <p className="fine">Last job import: {status.jobs.imported ?? 0} applications from {status.jobs.workbook ?? "Cubbie’s workbook"}, {new Date(status.jobs.lastImport).toLocaleString()}{status.jobs.skipped ? ` (${status.jobs.skipped} rejected or withdrawn skipped)` : ""}.</p>}
       {status?.jobs?.error && <p className="error" role="alert">{status.jobs.error}</p>}
     </section>
     {notice && <p className="local-notice" role="status">{notice}</p>}

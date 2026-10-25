@@ -20,7 +20,7 @@ function load(path) {
   const output = ts.transpileModule(readFileSync(file, "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022 }
   }).outputText;
-  const sourceRequire = id => id.startsWith(".") ? load(resolve(dirname(file), id))
+  const sourceRequire = id => /\.(png|jpe?g)$/.test(id) ? id : id.startsWith(".") ? load(resolve(dirname(file), id))
     : id.startsWith("@cubbie/shared/") ? load(resolve(root, "../../packages/shared/src", id.slice("@cubbie/shared/".length))) : require(id);
   new Function("require", "module", "exports", output)(sourceRequire, module, module.exports);
   return module.exports;
@@ -29,6 +29,18 @@ const { dashboardTasks, datedItems, isCourseworkTodo } = load(resolve(root, "src
 const task = (id, patch = {}) => ({ id, view: "student", status: "todo", title: `Assignment ${id}`,
   kind: "assignment", source: "canvas", dueAt: "2026-10-25T12:00:00-07:00", ...patch });
 const now = new Date("2026-10-24T15:00:00-07:00");
+
+test("Discord locks all personal view switches and restores them when turned off", () => {
+  const { TopBar } = load(resolve(root, "src/components/TopBar"));
+  const render = discordOpen => renderToStaticMarkup(React.createElement(TopBar, {
+    view: "student", discordOpen, graderAvailable: true, query: "", theme: "light", pane: "board",
+    onView() {}, onQuery() {}, onTheme() {}, onPane() {}, onSettings() {}, onDiscord() {}
+  }));
+  const buttons = html => html.match(/<nav class="view-switch"[^>]*>(.*?)<\/nav>/)[1].match(/<button[^>]*>/g);
+  assert.equal(buttons(render(true)).length, 3);
+  assert.ok(buttons(render(true)).every(button => button.includes('disabled=""') && button.includes('aria-pressed="false"')));
+  assert.ok(buttons(render(false)).every(button => !button.includes('disabled=""')));
+});
 
 test("legacy imports without publication metadata are visible; explicit unpublished work is hidden", () => {
   assert.equal(isCourseworkTodo(task("legacy"), now), true);

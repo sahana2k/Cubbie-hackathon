@@ -370,7 +370,7 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .ts-chat-foot a { text-align: center; text-decoration: none; }
 .ts-connect { max-width: 720px; gap: 18px; }
 .ts-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: 0 0 18px; }
-.ts-board { display: grid; grid-template-columns: repeat(var(--cols), minmax(210px, 1fr)); gap: 14px; overflow-x: auto; align-items: start; padding: 3px 2px 18px; }
+.ts-board { display: grid; grid-template-columns: repeat(var(--cols), minmax(230px, 1fr)); gap: 14px; overflow-x: auto; align-items: start; padding: 3px 2px 18px; }
 .ts-column { border-radius: 18px; background: var(--paper-2); min-height: 240px; }
 .ts-column > header { display: flex; gap: 9px; align-items: center; padding: 12px; border-radius: 16px; margin-bottom: 7px; }
 .ts-tone-0 > header { background: var(--butter); }
@@ -399,7 +399,9 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .ts-details article + article { border-top: 1px solid var(--line); padding-top: 12px; margin-top: 12px; }
 .ts-details summary { cursor: pointer; font-weight: 600; }
 .ts-hint { padding: 14px 0; line-height: 1.6; }
-@media (max-width: 900px) { .ts-board { grid-template-columns: repeat(var(--cols), minmax(230px, 80vw)); } .ts-toolbar { flex-wrap: wrap; } }
+@media (max-width: 900px) { .ts-toolbar { flex-wrap: wrap; } }
+.split:has(> .ts-chat) { grid-template-columns: minmax(330px, 26.5%) minmax(0, 1fr); }
+@media (max-width: 900px) { .split:has(> .ts-chat) { grid-template-columns: 1fr; } }
 
 /* Discord message formatting and a shared chat/board refresh control. */
 .ts-chat-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 5px; margin-left: auto; }
@@ -492,3 +494,13 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .join-dashboard { border: 0; border-radius: 18px; background: #087bff; color: #fff; padding: 15px 29px; min-width: 220px; font-size: 17px; font-weight: 650; }
 .join-dashboard > span { margin-left: 22px; }
 .join-dashboard-row p { color: #909097; font-size: 13px; }
+.imessage-account-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.imessage-logo { background: linear-gradient(150deg, #65df72, #20b83e); color: #fff; position: relative; font-size: 0; }
+.imessage-logo::before { content: ''; width: 31px; height: 24px; background: #fff; border-radius: 50%; }
+.imessage-logo::after { content: ''; position: absolute; width: 9px; height: 9px; background: #fff; bottom: 12px; left: 15px; transform: skewY(-25deg); }
+.imessage-sync-actions { display: flex; align-items: center; gap: 16px; margin-top: 20px; flex-wrap: wrap; }
+.imessage-sync-button { display: inline-flex; align-items: center; justify-content: center; gap: 9px; min-height: 44px; }
+.imessage-sync-button > span { font-size: 21px; line-height: 1; }
+.imessage-handle { overflow-wrap: anywhere; color: var(--ink-2); font-size: 14px; }
+.ts-demo-controls { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 14px; border-bottom: 1px solid var(--line); color: var(--ink-2); font-size: 12px; }
+.ts-demo-controls button { font-size: 12px; padding: 6px 9px; }

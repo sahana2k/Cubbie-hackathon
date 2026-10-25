@@ -104,6 +104,14 @@ export default function App() {
     void guard(api.updateTask(id, patch));
   };
 
+  const syncJobs = api.local ? async () => {
+    const result = await api.local!.syncJobs();
+    const [updatedTasks, updatedStatus] = await Promise.all([api.listTasks(), api.status()]);
+    setTasks(updatedTasks); setStatus(updatedStatus);
+    setView("jobs"); setTab("board"); setPane("board"); setQuery("");
+    return `${result.active} active application${result.active === 1 ? "" : "s"} synced to Job hunt.${result.skipped ? ` ${result.skipped} rejected, withdrawn or closed skipped.` : ""}`;
+  } : undefined;
+
   return (
     <div className={`app pane-${pane}`}>
       <TopBar view={view} onView={v => { setView(v); setPane("board"); }} query={query} onQuery={setQuery} status={status}
@@ -114,7 +122,7 @@ export default function App() {
 
       <main className="split">
         {tab === "discord" ? <aside id="tesseract-chat" className="chat ts-chat" aria-label="Discord connection" /> : <ChatPane messages={messages} typing={typing} status={status} draft={draft} onDraft={setDraft} focusKey={focusKey}
-          onSend={text => void guard(api.sendMessage(text))} />}
+          onSend={text => void guard(api.sendMessage(text))} onSyncJobs={syncJobs} />}
 
         <section className="work" aria-label="Dashboard">
           <div className="work-head">

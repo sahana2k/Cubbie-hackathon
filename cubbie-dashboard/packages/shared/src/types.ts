@@ -91,6 +91,8 @@ export interface IntegrationStatus {
   transport?: "local";
   canvas?: { connected: boolean; graderAvailable?: boolean; lastSync?: string | null; error?: string | null; coverageNotes?: string[] };
   imessageError?: string | null;
+  /** Local mode: the job list Cubbie sends as cubboard-jobs-<date>.xlsx in the Cubbie thread. */
+  jobs?: { lastImport?: string | null; imported?: number | null; skipped?: number | null; workbook?: string | null; error?: string | null };
   imessageRelay: "online" | "offline" | "not_set_up";
   relayDevice?: string | null;
   discord: "linked" | "not_linked";

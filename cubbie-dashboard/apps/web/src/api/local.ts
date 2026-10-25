@@ -48,7 +48,8 @@ export function createLocalApi(base: string): Api {
       syncCanvas: (courses, includeOtherCourses = false) => change("/local/canvas/sync", { courses, includeOtherCourses }),
       disconnectCanvas: () => change("/local/canvas/disconnect"),
       connectMessages: handle => change("/local/imessage/connect", { handle }),
-      disconnectMessages: () => change("/local/imessage/disconnect")
+      disconnectMessages: () => change("/local/imessage/disconnect"),
+      syncJobs: () => change("/local/jobs/sync")
     },
     listTasks: () => call<{ items: Task[] }>("/tasks").then(result => result.items),
     createTask: draft => change("/tasks", draft),

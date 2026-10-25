@@ -65,9 +65,11 @@ export function isCourseworkTodo(task: Task, now = new Date()): boolean {
   return due >= start.getTime() && due < end.getTime();
 }
 
-/** One coursework selection shared by Board, List, Calendar, and the summary. */
+/** One task selection shared by Board, List, Calendar, and the summary. */
 export function dashboardTasks(tasks: Task[], now = new Date()): Task[] {
-  return tasks.filter(task => task.view !== "student" || (
+  return tasks.filter(task => task.view === "jobs"
+    ? VIEWS.jobs.columns.some(column => column.id === task.status)
+    : task.view !== "student" || (
     task.published !== false &&
     (task.status !== "todo" || isCourseworkTodo(task, now))
   )).map(task => task.view === "student" && task.status === "partial"

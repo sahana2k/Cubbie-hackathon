@@ -5,6 +5,7 @@ from contextlib import contextmanager
 import json
 import mimetypes
 import os
+import re
 from pathlib import Path
 import secrets
 import sqlite3
@@ -15,7 +16,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import unquote, urlsplit
 import uuid
 
-from canvas import Canvas, ConnectionError, assignment_task
+from canvas import Canvas, ConnectionError, assignment_task, course_activity, course_defaults, current_term
 from messages import Messages
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -64,9 +65,21 @@ class State:
                 json.dump(self.config, output)
             os.replace(temporary, path)
 
-    def tasks(self):
+    def tasks(self, all_courses=False):
         with database(self.path) as db:
-            return [json.loads(row[0]) for row in db.execute('SELECT data FROM tasks ORDER BY id')]
+            tasks = [json.loads(row[0]) for row in db.execute('SELECT data FROM tasks ORDER BY id')]
+        courses = self.config.get('courses', [])
+        if all_courses or not courses:
+            return tasks
+        choices = {str(c['id']): c for c in course_defaults(courses, self.config.get('includeOtherCourses', False))}
+        names = {c['name']: c for c in choices.values()}
+        def visible(task):
+            if task.get('source') != 'canvas':
+                return True
+            match = re.match(r'canvas:course:([^:]+):', task.get('sourceId') or '')
+            course = choices.get(match.group(1)) if match else names.get(task.get('course'))
+            return bool(course and course.get('view') == task.get('view') and course.get('view') != 'skip')
+        return [task for task in tasks if visible(task)]
 
     def put_tasks(self, tasks, preserve_board_status=False):
         with self.lock, database(self.path) as db:
@@ -101,12 +114,15 @@ class State:
 
     def connections(self):
         return {'canvasConnected': self.canvas is not None, 'canvasUrl': self.config.get('canvasUrl', 'https://canvas.asu.edu'),
-                'canvasAccount': self.config.get('canvasAccount'), 'courses': self.config.get('courses', []),
+                'canvasAccount': self.config.get('canvasAccount'),
+                'courses': course_defaults(self.config.get('courses', []), self.config.get('includeOtherCourses', False)),
+                'currentTermLabel': '%s %s' % current_term(),
+                'includeOtherCourses': self.config.get('includeOtherCourses', False),
                 'handle': self.config.get('handle', ''), 'lastSync': self.config.get('lastCanvasSync'),
                 'coverageNotes': self.config.get('coverageNotes', []), 'canvasError': self.canvas_error,
                 'imessageError': self.messages_error}
 
-    def sync_canvas(self, requested):
+    def sync_canvas(self, requested, include_other=False):
         if not self.canvas:
             raise ConnectionError('Connect Canvas with your personal token first. It must be re-entered after a server restart.')
         if not self.sync_lock.acquire(blocking=False):
@@ -119,7 +135,10 @@ class State:
             for choice in requested:
                 if not isinstance(choice, dict) or str(choice.get('id')) not in allowed or choice.get('view') not in ('student', 'grader'):
                     raise ConnectionError('Choose a course returned by this Canvas connection and a valid role.')
-                selected.append({**allowed[str(choice['id'])], 'view': choice['view']})
+                course = allowed[str(choice['id'])]
+                if course_activity(course)[0] != 'current' and not include_other:
+                    raise ConnectionError('Only current courses are selected by default. Enable “Show other courses” to explicitly import a different term.')
+                selected.append({**course, 'view': choice['view']})
             tasks, notes = [], []
             for course in selected:
                 try:
@@ -134,7 +153,7 @@ class State:
             chosen = {str(c['id']): c['view'] for c in selected}
             for course in self.config['courses']:
                 course['view'] = chosen.get(str(course['id']), 'skip')
-            self.config.update(lastCanvasSync=now(), coverageNotes=notes)
+            self.config.update(lastCanvasSync=now(), coverageNotes=notes, includeOtherCourses=bool(include_other))
             self.save_config()
             self.canvas_error = None
             return {'imported': len(tasks), 'coverageNotes': notes}
@@ -242,7 +261,7 @@ class Handler(BaseHTTPRequestHandler):
                 # A different Canvas user must not see the previous user's imported records.
                 if self.state.config.get('canvasUserId') not in (None, identity['id']):
                     with database(self.state.path) as db:
-                        for task in self.state.tasks():
+                        for task in self.state.tasks(all_courses=True):
                             if task.get('source') == 'canvas':
                                 db.execute('DELETE FROM tasks WHERE id=?', (task['id'],))
                     self.state.config.update(lastCanvasSync=None, coverageNotes=[])
@@ -253,7 +272,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.state.save_config()
                 return self.reply(200, self.state.connections())
             if path == '/api/local/canvas/sync' and self.command == 'POST':
-                return self.reply(200, self.state.sync_canvas(data.get('courses')))
+                return self.reply(200, self.state.sync_canvas(data.get('courses'), data.get('includeOtherCourses') is True))
             if path == '/api/local/canvas/disconnect' and self.command == 'POST':
                 self.state.canvas = None
                 self.state.canvas_error = None

@@ -2,15 +2,19 @@ import type { ChatMessage, DiscordMessage, IntegrationStatus, RealtimeEvent, Tas
 
 export type TaskDraft = Partial<Task> & Pick<Task, "view" | "status" | "title" | "kind">;
 
-export interface LocalCourse { id: number; name: string; roles: string[]; view: "student" | "grader" | "skip" }
+export interface LocalCourse {
+  id: number; name: string; roles: string[]; view: "student" | "grader" | "skip";
+  activity?: "current" | "past" | "future" | "unknown"; activityReason?: string; termName?: string;
+}
 export interface LocalConnections {
   canvasConnected: boolean; canvasUrl: string; canvasAccount?: string; courses: LocalCourse[];
   handle: string; lastSync?: string; coverageNotes?: string[]; canvasError?: string; imessageError?: string;
+  currentTermLabel?: string; includeOtherCourses?: boolean;
 }
 export interface LocalApi {
   connections(): Promise<LocalConnections>;
   connectCanvas(url: string, token: string): Promise<LocalConnections>;
-  syncCanvas(courses: Pick<LocalCourse, "id" | "view">[]): Promise<{ imported: number; coverageNotes: string[] }>;
+  syncCanvas(courses: Pick<LocalCourse, "id" | "view">[], includeOtherCourses?: boolean): Promise<{ imported: number; coverageNotes: string[] }>;
   disconnectCanvas(): Promise<void>;
   connectMessages(handle: string): Promise<LocalConnections>;
   disconnectMessages(): Promise<void>;

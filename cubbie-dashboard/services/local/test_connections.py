@@ -3,8 +3,9 @@ from pathlib import Path
 import sqlite3
 import tempfile
 import unittest
+from datetime import datetime, timezone
 
-from canvas import Canvas, ConnectionError, assignment_task
+from canvas import Canvas, ConnectionError, assignment_task, course_activity, course_defaults
 from messages import Messages, body_text, handles
 from server import State, database
 
@@ -41,7 +42,44 @@ class CanvasTests(unittest.TestCase):
         client = Canvas('https://canvas.asu.edu', 'test-only-token')
         client.pages = lambda _: [{'id': 1, 'name': 'Unknown', 'enrollments': []},
                                   {'id': 2, 'name': 'Staff', 'enrollments': [{'type': 'ta'}]}]
-        self.assertEqual([c['view'] for c in client.courses()], ['skip', 'grader'])
+        courses = client.courses()
+        self.assertEqual([c['view'] for c in courses], ['skip', 'skip'])
+        self.assertEqual(courses[1]['enrollmentView'], 'grader')
+
+
+class CurrentTermTests(unittest.TestCase):
+    at = datetime(2026, 10, 24, 19, tzinfo=timezone.utc)
+
+    def test_last_fall_and_future_spring_are_excluded(self):
+        for name, activity in [('CSE 579 (2025 Fall C)', 'past'), ('CSE 579 (2026 Fall C)', 'current'),
+                               ('CSE 579 (Spring 2027)', 'future')]:
+            with self.subTest(name=name):
+                self.assertEqual(course_activity({'name': name}, self.at)[0], activity)
+
+    def test_canvas_session_dates_override_a_current_fall_label(self):
+        course = {'name': 'Course (2026 Fall A)', 'termStart': '2026-08-20T00:00:00Z',
+                  'termEnd': '2026-10-10T00:00:00Z'}
+        self.assertEqual(course_activity(course, self.at)[0], 'past')
+
+    def test_restricted_course_dates_override_term_dates(self):
+        course = {'name': 'Fall 2026', 'termStart': '2026-08-01T00:00:00Z', 'termEnd': '2026-12-31T00:00:00Z',
+                  'restrictToCourseDates': True, 'courseStart': '2026-11-01T00:00:00Z', 'courseEnd': '2026-12-31T00:00:00Z'}
+        self.assertEqual(course_activity(course, self.at)[0], 'future')
+
+    def test_term_dates_precede_unrestricted_old_course_dates(self):
+        course = {'name': 'Course', 'termStart': '2026-08-01T00:00:00Z', 'termEnd': '2026-12-31T00:00:00Z',
+                  'courseStart': '2025-01-01T00:00:00Z', 'courseEnd': '2025-12-31T00:00:00Z'}
+        self.assertEqual(course_activity(course, self.at)[0], 'current')
+
+    def test_unknown_training_and_concluded_courses_do_not_default_current(self):
+        self.assertEqual(course_activity({'name': 'Assistant training'}, self.at)[0], 'unknown')
+        self.assertEqual(course_activity({'name': 'Fall 2026', 'workflowState': 'completed'}, self.at)[0], 'past')
+
+    def test_current_staff_course_is_selected_but_historical_staff_course_is_not(self):
+        courses = [{'id': 1, 'name': 'CSE 579 (2026 Fall C)', 'view': 'grader'},
+                   {'id': 2, 'name': 'CSE 579 (2025 Fall C)', 'view': 'grader'}]
+        self.assertEqual([course['view'] for course in course_defaults(courses, at=self.at)], ['grader', 'skip'])
+        self.assertEqual([course['view'] for course in course_defaults(courses, True, self.at)], ['grader', 'grader'])
 
 
 class MessageTests(unittest.TestCase):
@@ -115,11 +153,29 @@ class StorageTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             state = State(Path(folder))
             state.canvas = Denied()
-            state.config['courses'] = [{'id': 1, 'name': 'Test', 'view': 'grader'}]
+            state.config['courses'] = [{'id': 1, 'name': 'Test', 'view': 'grader',
+                                        'termStart': '2000-01-01T00:00:00Z', 'termEnd': '2100-01-01T00:00:00Z'}]
             state.put_tasks([{'id': 'existing', 'source': 'manual', 'view': 'grader', 'status': 'todo', 'createdAt': 'now'}])
             with self.assertRaises(ConnectionError):
                 state.sync_canvas([{'id': 1, 'view': 'grader'}])
             self.assertEqual(len(state.tasks()), 1)
+
+    def test_old_canvas_cards_are_hidden_without_deleting_snapshots(self):
+        with tempfile.TemporaryDirectory() as folder:
+            state = State(Path(folder))
+            state.config['courses'] = [{'id': 1, 'name': 'Old course', 'view': 'student', 'termEnd': '2000-01-01T00:00:00Z'}]
+            state.put_tasks([{'id': 'old', 'source': 'canvas', 'sourceId': 'canvas:course:1:assignment:2:student',
+                              'view': 'student', 'status': 'todo', 'createdAt': 'now'}])
+            self.assertEqual(state.tasks(), [])
+            self.assertEqual(len(state.tasks(all_courses=True)), 1)
+
+    def test_other_term_cannot_be_imported_without_explicit_override(self):
+        with tempfile.TemporaryDirectory() as folder:
+            state = State(Path(folder))
+            state.canvas = object()
+            state.config['courses'] = [{'id': 1, 'name': 'Old course', 'view': 'student', 'termEnd': '2000-01-01T00:00:00Z'}]
+            with self.assertRaisesRegex(ConnectionError, 'Only current courses'):
+                state.sync_canvas([{'id': 1, 'view': 'student'}])
 
 
 if __name__ == '__main__':

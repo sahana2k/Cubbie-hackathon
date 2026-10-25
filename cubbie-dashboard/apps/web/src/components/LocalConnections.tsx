@@ -91,6 +91,9 @@ export function LocalConnections({ local, status, onError }: {
       </form>
       <p className="fine">If macOS blocks reading: System Settings → Privacy &amp; Security → Full Disk Access → enable your terminal, then restart this server. Sending a message from the composer may also require Automation → Messages permission. Connecting alone sends nothing.</p>
       {status?.imessageError && <p className="error" role="alert">{status.imessageError}</p>}
+      <p className="fine">Job list: when Cubbie sends your applications workbook (cubboard-jobs-…xlsx) in this thread, Job hunt updates automatically. Rejected applications are left out.</p>
+      {status?.jobs?.lastImport && <p className="fine">Last job import: {status.jobs.imported ?? 0} applications from {status.jobs.workbook ?? "Cubbie’s workbook"}, {new Date(status.jobs.lastImport).toLocaleString()}{status.jobs.skipped ? ` (${status.jobs.skipped} rejected or withdrawn skipped)` : ""}.</p>}
+      {status?.jobs?.error && <p className="error" role="alert">{status.jobs.error}</p>}
     </section>
     {notice && <p className="local-notice" role="status">{notice}</p>}
   </div>;

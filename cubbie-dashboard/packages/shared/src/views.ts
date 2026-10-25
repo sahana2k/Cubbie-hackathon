@@ -35,9 +35,7 @@ export const VIEWS: Record<View, ViewDef> = {
     columns: [
       { id: "applied", label: "Applied", wash: "butter", hint: "Waiting to hear back" },
       { id: "assessment", label: "Assessment", wash: "sky", hint: "OA or take-home" },
-      { id: "interview", label: "Interview", wash: "lilac", hint: "Scheduling or done" },
-      { id: "offer", label: "Offer", wash: "mint", hint: "Decide by the deadline" },
-      { id: "closed", label: "Closed", wash: "blush", hint: "Rejected or withdrawn" }
+      { id: "interview", label: "Interview", wash: "lilac", hint: "Scheduling or done" }
     ]
   }
 };

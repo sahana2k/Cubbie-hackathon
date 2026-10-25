@@ -19,6 +19,7 @@ export interface LocalApi {
   disconnectCanvas(): Promise<void>;
   connectMessages(handle: string): Promise<LocalConnections>;
   disconnectMessages(): Promise<void>;
+  syncJobs(): Promise<{ imported: number; active: number; skipped: number; workbook: string }>;
 }
 
 /** Everything the UI needs. The demo adapter and the live AWS adapter both implement it. */

@@ -117,6 +117,28 @@ class Messages:
             raise ConnectionError('This attachment is not available locally or exceeds the 20 MB image preview limit.')
         return path, row['mime_type']
 
+    def latest_jobs_workbook(self):
+        """Newest cubboard-jobs*.xlsx that Cubbie (not you) sent in this one-to-one thread, or None."""
+        placeholders = ','.join('?' for _ in self.handles)
+        try:
+            with self.connect() as connection:
+                rows = connection.execute(f'''SELECT a.ROWID as id, a.filename, a.transfer_name, m.date
+                    FROM attachment a JOIN message_attachment_join maj ON maj.attachment_id=a.ROWID
+                    JOIN message m ON m.ROWID=maj.message_id
+                    JOIN chat_message_join cmj ON cmj.message_id=m.ROWID
+                    JOIN chat c ON c.ROWID=cmj.chat_id
+                    WHERE c.chat_identifier IN ({placeholders}) AND c.style=45 AND m.is_from_me=0
+                      AND lower(COALESCE(a.transfer_name, a.filename, '')) LIKE '%cubboard-jobs%.xlsx'
+                    ORDER BY m.date DESC, a.ROWID DESC LIMIT 5''', self.handles).fetchall()
+        except sqlite3.Error:
+            raise ConnectionError('Could not read this Messages database. Check Full Disk Access and that Messages is signed in on this Mac.') from None
+        allowed = (Path.home() / 'Library/Messages/Attachments').resolve()
+        for row in rows:
+            path = Path(row['filename'] or '').expanduser().resolve()
+            if path.is_relative_to(allowed) and path.is_file() and path.stat().st_size <= 20_000_000:
+                return {'id': row['id'], 'path': path, 'name': row['transfer_name'] or path.name}
+        return None
+
     def send(self, text):
         # Called only from an explicit Send action in the dashboard. Nothing is sent on connect/sync.
         script = '''on run argv

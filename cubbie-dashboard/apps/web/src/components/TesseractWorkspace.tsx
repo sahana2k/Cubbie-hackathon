@@ -207,7 +207,7 @@ export function TesseractWorkspace({ query, setupOnly = false }: { query: string
       {provider === 'custom' && <label className="field">API base URL<input required type="url" value={baseUrl} onChange={e => setBaseUrl(e.target.value)} placeholder="https://your-provider.example/v1" /></label>}
       <label className="field">Provider API key<input required={!hasCredentials} type="password" autoComplete="off" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder={hasCredentials ? "Saved — leave blank to keep" : "Your provider’s API key"} /></label>
       <p className="fine">Opening settings does not change the connection. Server ID, provider and model are saved locally. Leave secret fields blank to keep their current values. Secrets stay in server memory and need re-entry only after the server stops. Use a model with tool calling; PDF/image support depends on your provider. Discord bots connect to server channels, not personal group DMs.</p>
-      <div className="row"><button className="primary" disabled={busy || !config().localApi}>{busy ? 'Preparing and connecting…' : connected ? 'Save changes' : 'Connect Discord + LLM'}</button>{connected && <button className="ghost" type="button" disabled={busy} onClick={() => void disconnect()}>Disconnect</button>}</div>
+      <div className="row"><button className="primary" disabled={busy || !config().localApi}>{busy ? 'Saving…' : connected ? 'Save changes' : 'Connect Discord + LLM'}</button>{connected && <button className="ghost" type="button" disabled={busy} onClick={() => void disconnect()}>Disconnect</button>}</div>
 
     </form>}
     </SetupDialog>}

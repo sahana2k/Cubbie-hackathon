@@ -4,7 +4,6 @@ import os
 from pathlib import Path
 import queue
 import secrets
-import shutil
 import sqlite3
 import subprocess
 import threading
@@ -105,34 +104,6 @@ class Tesseract:
                     self.process.stdout.close()
             self.process = self.port = self.token = None
 
-    def ensure_entry(self):
-        """Prepare the service even when Python was started without the npm launcher."""
-        service = self.root / 'services/tesseract'
-        entry = service / 'dist/index.js'
-        sources = list((service / 'src').rglob('*.ts'))
-        sources += [path for path in (service / 'package.json', service / 'tsconfig.json') if path.is_file()]
-        if entry.is_file() and (service / 'node_modules').is_dir() and all(path.stat().st_mtime <= entry.stat().st_mtime for path in sources):
-            return entry
-        pnpm = shutil.which('pnpm')
-        corepack = shutil.which('corepack')
-        runner = [pnpm] if pnpm else [corepack, 'pnpm'] if corepack else None
-        if not runner:
-            raise ValueError('Tesseract needs Node.js and pnpm installed on the dashboard host. Install them, then retry Connect.')
-        commands = []
-        if not (service / 'node_modules').is_dir():
-            commands.append([*runner, 'install', '--frozen-lockfile', '--filter', '@cubbie/tesseract...'])
-        commands.append([*runner, '--filter', '@cubbie/tesseract', 'build'])
-        for command in commands:
-            try:
-                result = subprocess.run(command, cwd=self.root, capture_output=True, text=True, timeout=180)
-            except (OSError, subprocess.TimeoutExpired):
-                raise ValueError('Tesseract preparation could not finish. In this dashboard folder run pnpm install, then pnpm build:tesseract, and retry Connect.') from None
-            if result.returncode:
-                raise ValueError('Tesseract preparation failed. In this dashboard folder run pnpm install, then pnpm build:tesseract to see the build error, and retry Connect.')
-        if not entry.is_file():
-            raise ValueError('The Tesseract build did not produce its entry file. Check this checkout with pnpm build:tesseract.')
-        return entry
-
     def _connect(self, data):
         with self.lock:
             for key in ('botToken', 'apiKey', 'model', 'guildId'):
@@ -147,7 +118,9 @@ class Tesseract:
                 url = urlsplit(data.get('baseUrl', ''))
                 if url.scheme != 'https' or not url.hostname or url.username or url.password or url.query or url.fragment:
                     raise ValueError('Enter an HTTPS API base URL without credentials, query or fragment.')
-            entry = self.ensure_entry()
+            entry = self.root / 'services/tesseract/dist/index.js'
+            if not entry.exists():
+                raise ValueError('Build the Tesseract service first: corepack pnpm --filter @cubbie/tesseract build')
             self._stop()
             self.token = secrets.token_urlsafe(32)
             env = {**os.environ, 'DISCORD_TOKEN': data['botToken'].strip(), 'DISCORD_CLIENT_ID': 'dashboard',

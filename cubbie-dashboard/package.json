@@ -12,7 +12,9 @@
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm --filter @cubbie/api test",
     "deploy": "pnpm --filter @cubbie/infra deploy",
-    "build:preview": "pnpm --filter @cubbie/web build:preview"
+    "build:preview": "pnpm --filter @cubbie/web build:preview",
+    "build:tesseract": "corepack pnpm --filter @cubbie/tesseract build && corepack pnpm --filter @cubbie/web build",
+    "test:tesseract": "corepack pnpm --filter @cubbie/tesseract test"
   },
   "engines": {
     "node": ">=20"

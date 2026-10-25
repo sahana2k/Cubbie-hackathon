@@ -18,6 +18,7 @@ import uuid
 
 from canvas import Canvas, ConnectionError, assignment_task, course_activity, course_defaults, current_term
 from messages import Messages
+from tesseract import Tesseract
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -43,6 +44,7 @@ class State:
         self.lock = threading.RLock()
         self.sync_lock = threading.Lock()
         self.session = secrets.token_urlsafe(32)
+        self.tesseract = Tesseract(ROOT, folder.resolve())
         self.canvas = None
         self.canvas_error = None
         self.messages_error = None
@@ -243,6 +245,14 @@ class Handler(BaseHTTPRequestHandler):
                     return self.reply(503, {'message': 'Build the frontend first: corepack pnpm --filter @cubbie/web build'})
                 return self.reply(200, target.read_bytes(), mimetypes.guess_type(target.name)[0] or 'application/octet-stream', cookie=target.name == 'index.html')
             if self.command == 'GET':
+                if path.startswith('/api/tesseract/'):
+                    route = path.removeprefix('/api/tesseract')
+                    if route == '/settings':
+                        return self.reply(200, self.state.tesseract.settings())
+                    if route not in ('/servers', '/channels', '/snapshot', '/messages'):
+                        return self.reply(404, {'message': 'Not found'})
+                    query = urlsplit(self.path).query
+                    return self.reply(200, self.state.tesseract.request(route + ('?' + query if query else '')))
                 if path == '/api/tasks':
                     return self.reply(200, {'items': self.state.tasks()})
                 if path == '/api/chat/messages':
@@ -257,6 +267,11 @@ class Handler(BaseHTTPRequestHandler):
                     file, mime = self.state.messages.attachment(int(path.rsplit('/', 1)[1]))
                     return self.reply(200, file.read_bytes(), mime)
             data = self.body() if self.command != 'GET' else {}
+            if path == '/api/tesseract/connect' and self.command == 'POST':
+                return self.reply(200, self.state.tesseract.connect(data))
+            if path == '/api/tesseract/disconnect' and self.command == 'POST':
+                self.state.tesseract.disconnect()
+                return self.reply(200, {'ok': True})
             if path == '/api/local/canvas/connect' and self.command == 'POST':
                 client = Canvas(data.get('url', 'https://canvas.asu.edu'), data.get('token', ''))
                 identity, _ = client.get('/api/v1/users/self/profile')
@@ -350,6 +365,7 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
+        server.state.tesseract.disconnect()
         server.server_close()
 
 

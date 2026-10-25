@@ -318,3 +318,91 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 
 .ev { min-width: 0; }
 .ev-title { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+/* Tesseract is scoped to the Discord tab; existing Canvas and iMessage views retain their layout. */
+.ts-chat { display: flex; flex-direction: column; min-height: 0; }
+.ts-chat-head { display: flex; align-items: center; gap: 10px; padding: 14px; border-bottom: 1px solid var(--line); }
+.ts-chat-head small { display: block; color: var(--ink-3); font-size: 11px; margin-top: 3px; }
+.ts-chat-head button { margin-left: auto; }
+.ts-selectors { display: grid; gap: 8px; padding: 12px; border-bottom: 1px solid var(--line); }
+.ts-selectors .field { font-size: 11px; }
+.ts-messages { flex: 1; overflow-y: auto; padding: 14px 12px; min-height: 0; }
+.ts-chat-empty { color: var(--ink-2); line-height: 1.6; padding: 12px 5px; }
+.ts-chat-empty h3 { color: var(--ink); font: 600 20px var(--display); }
+.ts-message { position: relative; display: grid; grid-template-columns: 27px minmax(0, 1fr); gap: 8px; margin: 14px -12px 0; padding: 2px 12px; font-size: 13px; }
+.ts-message.ts-grouped { margin-top: 0; }
+.ts-message:hover { background: var(--paper-2); }
+.ts-message .dc-av { width: 27px; height: 27px; font-size: 12px; }
+.ts-message .dc-meta { font-size: 12px; flex-wrap: wrap; gap: 6px; margin-bottom: 2px; }
+.ts-message-body { min-width: 0; }
+.ts-gutter-time { visibility: hidden; font-size: 9px; color: var(--ink-3); text-align: right; padding-top: 3px; white-space: nowrap; }
+.ts-message:hover .ts-gutter-time { visibility: visible; }
+.ts-jump { position: absolute; top: 2px; right: 8px; opacity: 0; font-size: 12px; color: var(--ink-3); text-decoration: none; padding: 0 4px; border-radius: 4px; background: var(--card); }
+.ts-message:hover .ts-jump, .ts-jump:focus-visible { opacity: 1; }
+.ts-attachment { display: inline-block; margin-top: 4px; font-size: 12px; }
+/* Discord markdown in the read-only feed. */
+.dm { line-height: 1.45; overflow-wrap: anywhere; color: var(--ink); }
+.dm p { margin: 0; }
+.dm-gap { height: .5em; }
+.dm-h { font-weight: 700; margin: 4px 0 2px !important; }
+.dm-h1 { font-size: 1.3em; } .dm-h2 { font-size: 1.15em; } .dm-h3 { font-size: 1.05em; }
+.dm-sub { font-size: 11px; color: var(--ink-3); margin: 2px 0 0; }
+.dm-li { position: relative; padding-left: 14px; }
+.dm-li::before { content: "•"; position: absolute; left: 3px; color: var(--ink-3); }
+.dm-quote { margin: 0; padding-left: 9px; border-left: 3px solid var(--line-2); color: var(--ink-2); }
+.dm-code { font: 11.5px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--paper-2); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+.dm-pre { margin: 4px 0; padding: 8px 10px; background: var(--paper-2); border: 1px solid var(--line); border-radius: 6px; overflow-x: auto; font: 11.5px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre; }
+.dm-mention { color: var(--accent); background: var(--accent-soft); border-radius: 4px; padding: 0 3px; font-weight: 600; white-space: nowrap; }
+.dm-time { background: var(--paper-2); border-radius: 4px; padding: 0 3px; cursor: help; }
+.dm-spoiler { background: var(--ink-3); color: transparent; border-radius: 4px; cursor: pointer; }
+.dm-spoiler * { visibility: hidden; }
+.dm-spoiler.on { background: var(--paper-2); color: inherit; cursor: auto; }
+.dm-spoiler.on * { visibility: visible; }
+.dm a { color: var(--accent); }
+.dm-embed { margin-top: 6px; padding: 9px 11px 10px; background: var(--paper-2); border: 1px solid var(--line); border-left: 4px solid var(--embed, var(--line-2)); border-radius: 6px; display: grid; gap: 6px; max-width: 520px; }
+.dm-embed-title, a.dm-embed-title { font-weight: 700; text-decoration: none; }
+.dm-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px 12px; }
+.dm-field { grid-column: 1 / -1; min-width: 0; }
+.dm-field.inline { grid-column: auto; }
+.dm-field-name { font-weight: 700; font-size: 12px; margin-bottom: 1px; }
+.ts-chat-foot { padding: 12px; border-top: 1px solid var(--line); display: grid; gap: 12px; }
+.ts-chat-foot a { text-align: center; text-decoration: none; }
+.ts-connect { max-width: 720px; gap: 18px; }
+.ts-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: 0 0 18px; }
+.ts-board { display: grid; grid-template-columns: repeat(var(--cols), minmax(210px, 1fr)); gap: 14px; overflow-x: auto; align-items: start; padding: 3px 2px 18px; }
+.ts-column { border-radius: 18px; background: var(--paper-2); min-height: 240px; }
+.ts-column > header { display: flex; gap: 9px; align-items: center; padding: 12px; border-radius: 16px; margin-bottom: 7px; }
+.ts-tone-0 > header { background: var(--butter); }
+.ts-tone-1 > header { background: #dbe8f7; color: #26374e; }
+.ts-tone-2 > header { background: var(--lilac); }
+.ts-tone-3 > header { background: #daedda; color: #244b38; }
+.ts-person { display: grid; place-items: center; width: 30px; height: 30px; flex-shrink: 0; border-radius: 50%; background: #ffffff70; font-weight: 700; }
+.ts-column h3 { margin: 0; font-size: 13px; overflow-wrap: anywhere; }
+.ts-column h3 span { background: #ffffff90; border-radius: 10px; padding: 1px 5px; font-size: 10px; margin-left: 4px; }
+.ts-column header p { margin: 3px 0 0; font-size: 10px; opacity: .65; }
+.ts-cards { display: grid; gap: 9px; padding: 0 7px 10px; }
+.ts-card { background: var(--card); padding: 12px; border-radius: 12px; border: 1px solid var(--line); box-shadow: 0 3px 9px #00000005; }
+.ts-card h4 { margin: 8px 0; font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
+.ts-card p { font-size: 11px; color: var(--ink-2); line-height: 1.5; overflow-wrap: anywhere; }
+.ts-status { display: inline-block; font-size: 10px; border-radius: 8px; padding: 3px 6px; background: var(--paper-2); color: var(--ink-2); }
+.ts-status-proposed { background: #f6e5b8; color: #6b5219; }
+.ts-status-done { background: #deeedb; color: #325c30; }
+.ts-status-blocked, .ts-status-overdue { background: #f8dfd7; color: #934333; }
+.ts-status-in_progress { background: #dceafa; color: #335d87; }
+.ts-card footer { display: flex; justify-content: space-between; gap: 8px; font-size: 10px; color: var(--ink-3); margin-top: 14px; }
+.ts-card footer a { color: var(--ink-3); }
+.ts-late, .ts-blocked { color: #b45d3c !important; }
+.ts-no-tasks { color: var(--ink-3); font-size: 11px; padding: 10px 5px; }
+.ts-details { border: 1px solid var(--line); background: var(--card); border-radius: 13px; padding: 14px; margin: 12px 0; font-size: 12px; }
+.ts-details h3 { margin: 0 0 12px; font-size: 14px; }
+.ts-details article + article { border-top: 1px solid var(--line); padding-top: 12px; margin-top: 12px; }
+.ts-details summary { cursor: pointer; font-weight: 600; }
+.ts-hint { padding: 14px 0; line-height: 1.6; }
+@media (max-width: 900px) { .ts-board { grid-template-columns: repeat(var(--cols), minmax(230px, 80vw)); } .ts-toolbar { flex-wrap: wrap; } }
+
+/* Discord message formatting and a shared chat/board refresh control. */
+.ts-chat-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 5px; margin-left: auto; }
+.ts-chat-head .ts-chat-actions button { margin-left: 0; font-size: 11px; padding: 6px 8px; }
+.ts-sync-status { margin: 0; padding: 6px 12px; font-size: 10px; color: var(--ink-3); border-bottom: 1px solid var(--line); }
+
+
+.ts-connection-message { padding: 22px 16px; color: var(--ink-2); line-height: 1.6; flex: 1; }

@@ -61,3 +61,7 @@ image during deploy, and a Mac signed in to Messages for the iMessage relay.
 ## License
 
 Apache-2.0, matching the Cubbie hackathon kit.
+
+## Discord group projects with Tesseract
+
+The Discord tab now has a server conversation pane and a task board grouped by teammate, backed by the bundled Tesseract agents. Run `corepack pnpm build:tesseract` followed by `corepack pnpm live`, then connect your Discord bot and preferred LLM in the Discord tab. See [Tesseract setup and verification](docs/tesseract.md) for bot permissions, provider keys, and supported workflows.

@@ -5,7 +5,7 @@ import { api, type TaskDraft } from "./api";
 import { Icon, type IconName } from "./components/Icon";
 import { Board } from "./components/Board";
 import { ChatPane } from "./components/ChatPane";
-import { DiscordPanel } from "./components/DiscordPanel";
+import { TesseractWorkspace } from "./components/TesseractWorkspace";
 import { Settings } from "./components/Settings";
 import { TaskDrawer } from "./components/TaskDrawer";
 import { TopBar } from "./components/TopBar";
@@ -32,7 +32,7 @@ export default function App() {
   const [tab, setTab] = useState<Tab>("board");
   const [tasks, setTasks] = useState<Task[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [discord, setDiscord] = useState<DiscordMessage[]>([]);
+  const [, setDiscord] = useState<DiscordMessage[]>([]);
   const [status, setStatus] = useState<IntegrationStatus | null>(null);
   const [typing, setTyping] = useState(false);
   const [query, setQuery] = useState("");
@@ -113,18 +113,19 @@ export default function App() {
         onReset={api.reset ? () => void api.reset!().then(load) : undefined} />
 
       <main className="split">
-        <ChatPane messages={messages} typing={typing} status={status} draft={draft} onDraft={setDraft} focusKey={focusKey}
-          onSend={text => void guard(api.sendMessage(text))} />
+        {tab === "discord" ? <aside id="tesseract-chat" className="chat ts-chat" aria-label="Discord connection" /> : <ChatPane messages={messages} typing={typing} status={status} draft={draft} onDraft={setDraft} focusKey={focusKey}
+          onSend={text => void guard(api.sendMessage(text))} />}
 
         <section className="work" aria-label="Dashboard">
           <div className="work-head">
             <div>
-              <h1>{tab === "settings" ? "Settings" : tab === "discord" ? "Discord" : view === "student" ? "Coursework" : view === "grader" ? "Grading" : "Job hunt"}</h1>
-              <p className="summary">{tab === "settings" ? "Connect iMessage, Cubbie and Discord." : summary(view, visible)}</p>
+              <h1>{tab === "settings" ? "Settings" : tab === "discord" ? "Group project" : view === "student" ? "Coursework" : view === "grader" ? "Grading" : "Job hunt"}</h1>
+              <p className="summary">{tab === "discord" ? "Your group project, in four dimensions." : tab === "settings" ? "Connect iMessage, Cubbie and Discord." : summary(view, visible)}</p>
             </div>
             <div className="tabs" role="tablist" aria-label="Dashboard sections">
               {TABS.map(t => (
-                <button key={t.id} role="tab" aria-selected={tab === t.id} className={tab === t.id ? "on" : ""} onClick={() => setTab(t.id)}><Icon name={t.icon} />{t.label}</button>
+                <button key={t.id} role="tab" aria-selected={tab === t.id} className={tab === t.id ? "on" : ""} onClick={() => setTab(t.id)}
+                  disabled={tab === "discord"} title={tab === "discord" ? "Turn Discord off to use this view" : undefined}><Icon name={t.icon} />{t.label}</button>
               ))}
             </div>
           </div>
@@ -140,7 +141,7 @@ export default function App() {
               </>
             )}
             {tab === "week" && <WeekView tasks={visible} onOpen={setOpenId} />}
-            {tab === "discord" && <DiscordPanel messages={discord} status={status} onSend={(t, c) => void guard(api.sendDiscord(t, c))} onSetup={() => setTab("settings")} />}
+            {tab === "discord" && <TesseractWorkspace query={query} />}
             {tab === "settings" && <Settings api={api} status={status} onError={setError} />}
           </div>
         </section>

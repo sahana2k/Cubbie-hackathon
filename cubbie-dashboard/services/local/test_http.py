@@ -1,5 +1,7 @@
 import http.client
 import json
+import subprocess
+import sys
 from pathlib import Path
 import tempfile
 import threading
@@ -55,6 +57,42 @@ class LocalHttpTests(unittest.TestCase):
             with self.subTest(headers=headers):
                 self.assertEqual(self.request('GET', '/api/tasks', headers=headers)[0], 403)
         self.assertEqual(self.request('POST', '/api/tasks', {}, {'Origin': ''})[0], 403)
+
+    def test_tesseract_routes_require_session_and_restrict_proxy_paths(self):
+        self.assertEqual(self.request('POST', '/api/tesseract/connect', {}, {'Cookie': ''})[0], 403)
+        self.assertEqual(self.request('POST', '/api/tesseract/connect', {}, {'Origin': 'https://evil.example'})[0], 403)
+        self.assertEqual(self.request('GET', '/api/tesseract/unknown')[0], 404)
+        self.assertEqual(self.request('GET', '/api/tesseract/servers')[0], 400)
+        with patch.object(self.http.state.tesseract, 'request', return_value={'servers': []}) as proxy:
+            self.assertEqual(self.request('GET', '/api/tesseract/channels?guild=123')[0], 200)
+            proxy.assert_called_once_with('/channels?guild=123')
+            self.assertEqual(self.request('GET', '/api/tesseract/messages?guild=123&channel=456')[0], 200)
+            proxy.assert_called_with('/messages?guild=123&channel=456')
+
+    def test_toggling_discord_panel_keeps_bot_connected_without_reentering_secrets(self):
+        bridge = self.http.state.tesseract
+        bot = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])
+        self.addCleanup(bridge.disconnect)
+        def fake_connect(data):
+            bridge.process, bridge.port, bridge.token = bot, 1, 'bridge-token'
+            return {'servers': [{'id': '123', 'name': 'hackathon project'}]}
+        # Same fields the dashboard form posts.
+        creds = {'provider': 'anthropic', 'model': 'm', 'baseUrl': '', 'botToken': 'bot-secret', 'apiKey': 'llm-secret', 'guildId': '123'}
+        with patch.object(bridge, '_connect', side_effect=fake_connect) as start, \
+             patch.object(bridge, 'request', return_value={'servers': [{'id': '123', 'name': 'hackathon project'}]}):
+            self.assertEqual(self.request('POST', '/api/tesseract/connect', creds)[0], 200)
+            for _ in range(3):  # Each Discord off -> on remounts the panel, which repeats exactly these calls.
+                code, saved = self.request('GET', '/api/tesseract/settings')
+                self.assertEqual(code, 200)
+                self.assertTrue(saved['connected'])
+                self.assertTrue(saved['hasCredentials'])
+                self.assertEqual(saved['guildId'], '123')
+                self.assertNotIn('botToken', saved); self.assertNotIn('apiKey', saved)
+                self.assertEqual(self.request('GET', '/api/tesseract/servers')[0], 200)
+            # Saving settings with blank secret fields keeps the running bot instead of asking again.
+            self.assertEqual(self.request('POST', '/api/tesseract/connect', {**creds, 'botToken': '', 'apiKey': ''})[0], 200)
+        self.assertEqual(start.call_count, 1)
+        self.assertIsNone(bot.poll())
 
     def test_manual_tasks_are_real_local_records(self):
         code, task = self.request('POST', '/api/tasks', {'title': 'Actual user task', 'view': 'student', 'kind': 'task', 'status': 'todo'})

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Personal, loopback-only dashboard with direct Canvas and the selected Cubbie Messages thread."""
 import argparse
+import hashlib
 from contextlib import contextmanager
 import json
 import mimetypes
@@ -18,6 +19,7 @@ import uuid
 
 from canvas import Canvas, ConnectionError, assignment_task, course_activity, course_defaults, current_term
 from messages import Messages
+from jobs import ACTIVE, SYNC_PROMPT, ingest
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -54,8 +56,22 @@ class State:
         path = folder / 'board.sqlite3'
         with database(path) as db:
             db.execute('CREATE TABLE IF NOT EXISTS tasks (id TEXT PRIMARY KEY, data TEXT NOT NULL)')
+            db.execute('CREATE TABLE IF NOT EXISTS job_records (scope TEXT, application_key TEXT, data TEXT NOT NULL, PRIMARY KEY(scope,application_key))')
+            db.execute('CREATE TABLE IF NOT EXISTS job_messages (scope TEXT, fingerprint TEXT, PRIMARY KEY(scope,fingerprint))')
         os.chmod(path, 0o600)
         self.path = path
+
+    def job_scope(self):
+        handle = self.config.get('handle', '').strip().casefold()
+        if '@' not in handle:
+            handle = re.sub(r'\D', '', handle)
+            if len(handle) == 10:
+                handle = '1' + handle
+        return hashlib.sha256(handle.encode()).hexdigest()[:20]
+
+    def import_jobs(self, messages):
+        with self.lock, database(self.path) as db:
+            return ingest(db, self.job_scope(), messages)
 
     def save_config(self):
         with self.lock:
@@ -68,6 +84,11 @@ class State:
     def tasks(self, all_courses=False):
         with database(self.path) as db:
             tasks = [json.loads(row[0]) for row in db.execute('SELECT data FROM tasks ORDER BY id')]
+        if not all_courses:
+            tasks = [task for task in tasks if task.get('view') != 'jobs' or (
+                task.get('status') in ACTIVE and (task.get('job') or {}).get('stage') == task.get('status')
+                and (task.get('job') or {}).get('statusMessageId') and (task.get('job') or {}).get('statusEvidence')
+                and (task.get('sourceId') or '').startswith('imessage-job:' + self.job_scope() + ':'))]
         courses = self.config.get('courses', [])
         if all_courses or not courses:
             return tasks
@@ -94,15 +115,27 @@ class State:
                 db.execute('INSERT OR REPLACE INTO tasks VALUES (?,?)', (task['id'], json.dumps(task)))
 
     def message_rows(self):
+        with self.lock:
+            if not self.messages:
+                return []
+            try:
+                rows = self.messages.rows()
+                self.import_jobs(rows)
+                self.messages_error = None
+                return rows
+            except ConnectionError as error:
+                self.messages_error = str(error)
+                return []
+
+    def sync_jobs(self):
         if not self.messages:
-            return []
-        try:
-            rows = self.messages.rows()
-            self.messages_error = None
-            return rows
-        except ConnectionError as error:
-            self.messages_error = str(error)
-            return []
+            raise ConnectionError('Connect your real Cubbie conversation in Settings before syncing Job hunt.')
+        rows = self.messages.rows(10000)
+        imported = self.import_jobs(rows)
+        # Sending occurs only after the user's explicit Job hunt Sync action.
+        self.messages.send(SYNC_PROMPT)
+        return {'requested': True, 'imported': imported, 'historyLimitReached': len(rows) >= 10000,
+                'message': 'Asked Cubbie to refresh Gmail application statuses. Cards update when its confirmed replies arrive.'}
 
     def status(self):
         return {'mode': 'live', 'transport': 'local',
@@ -276,6 +309,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.reply(200, self.state.connections())
             if path == '/api/local/canvas/sync' and self.command == 'POST':
                 return self.reply(200, self.state.sync_canvas(data.get('courses'), data.get('includeOtherCourses') is True))
+            if path == '/api/local/jobs/sync' and self.command == 'POST':
+                return self.reply(200, self.state.sync_jobs())
             if path == '/api/local/canvas/disconnect' and self.command == 'POST':
                 self.state.canvas = None
                 self.state.canvas_error = None
@@ -284,16 +319,18 @@ class Handler(BaseHTTPRequestHandler):
                 reader = Messages(str(data.get('handle', '')))
                 if not reader.rows(1):
                     raise ConnectionError('No local one-to-one conversation matches that handle. Open the existing Cubbie thread in Messages and check its exact phone/email.')
-                self.state.messages = reader
-                self.state.messages_error = None
-                self.state.config['handle'] = reader.handle
-                self.state.save_config()
+                with self.state.lock:
+                    self.state.messages = reader
+                    self.state.messages_error = None
+                    self.state.config['handle'] = reader.handle
+                    self.state.save_config()
                 return self.reply(200, self.state.connections())
             if path == '/api/local/imessage/disconnect' and self.command == 'POST':
-                self.state.messages = None
-                self.state.messages_error = None
-                self.state.config.pop('handle', None)
-                self.state.save_config()
+                with self.state.lock:
+                    self.state.messages = None
+                    self.state.messages_error = None
+                    self.state.config.pop('handle', None)
+                    self.state.save_config()
                 return self.reply(200, {'ok': True})
             if path == '/api/chat/messages' and self.command == 'POST':
                 text = data.get('text')
@@ -304,6 +341,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.state.messages.send(text.strip())
                 return self.reply(201, {'id': 'pending_' + uuid.uuid4().hex, 'direction': 'out', 'text': text, 'at': now(), 'status': 'sent'})
             if path == '/api/tasks' and self.command == 'POST':
+                if data.get('view') == 'jobs':
+                    raise ConnectionError('Job hunt cards are created only from explicit application statuses in the Cubbie chat. Use Sync Job hunt.')
                 if data.get('view') not in ('student', 'grader', 'jobs') or not isinstance(data.get('title'), str) or not data['title'].strip():
                     raise ValueError('A task needs a title and valid view.')
                 task = {**data, 'id': uuid.uuid4().hex, 'source': 'manual', 'createdAt': now(), 'updatedAt': now()}
@@ -319,6 +358,10 @@ class Handler(BaseHTTPRequestHandler):
                         db.execute('DELETE FROM tasks WHERE id=?', (task_id,))
                     return self.reply(200, {'ok': True})
                 allowed = {'status', 'title', 'notes', 'priority', 'progress', 'dueAt', 'dueLabel'}
+                if old.get('view') == 'jobs':
+                    if 'status' in data and data['status'] != old['status']:
+                        raise ConnectionError('Application status follows verified Cubbie chat updates. Ask Cubbie to check the status.')
+                    allowed = {'notes', 'priority'}
                 task = {**old, **{k: v for k, v in data.items() if k in allowed}, 'updatedAt': now()}
                 self.state.put_tasks([task])
                 return self.reply(200, task)
@@ -343,6 +386,16 @@ def main():
     args = parser.parse_args()
     server = ThreadingHTTPServer(('127.0.0.1', args.port), Handler)
     server.state = State(args.state_dir)
+    stop = threading.Event()
+    def refresh_chat():
+        while not stop.is_set():
+            try:
+                server.state.message_rows()
+            except (OSError, sqlite3.Error, ValueError):
+                server.state.messages_error = 'Could not refresh the local conversation. Check Messages access and reconnect in Settings.'
+            stop.wait(3)
+    watcher = threading.Thread(target=refresh_chat, daemon=True)
+    watcher.start()
     print(f'Private dashboard: http://127.0.0.1:{server.server_port}/#student', flush=True)
     print('Open Settings to connect Canvas and the Cubbie chat. No sample data is loaded.', flush=True)
     try:
@@ -350,6 +403,8 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
+        stop.set()
+        watcher.join(timeout=5)
         server.server_close()
 
 

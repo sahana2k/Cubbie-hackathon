@@ -19,7 +19,7 @@ export function TaskCard({ task, onOpen }: { task: Task; onOpen: (id: string) =>
   return (
     <article
       className={`card prio-${task.priority ?? "none"}`}
-      draggable
+      draggable={task.view !== "jobs"}
       onDragStart={e => { e.dataTransfer.setData("text/plain", task.id); e.dataTransfer.effectAllowed = "move"; (e.currentTarget as HTMLElement).classList.add("dragging"); }}
       onDragEnd={e => (e.currentTarget as HTMLElement).classList.remove("dragging")}
     >
@@ -29,7 +29,7 @@ export function TaskCard({ task, onOpen }: { task: Task; onOpen: (id: string) =>
         <span className="kind">{KIND_LABEL[task.kind]}</span>
       </div>
       <h3>{task.title}</h3>
-      {j && <p className="sub">{j.role}{j.location ? `, ${j.location}` : ""}</p>}
+      {j && j.role !== task.title && <p className="sub">{j.role}{j.location ? `, ${j.location}` : ""}</p>}
 
       {g && (
         <dl className="stats">

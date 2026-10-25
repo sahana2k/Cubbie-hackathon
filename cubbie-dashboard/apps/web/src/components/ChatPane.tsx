@@ -1,9 +1,12 @@
 import { useEffect, useRef } from "react";
-import type { ChatMessage, IntegrationStatus } from "@cubbie/shared/types";
+import type { ChatMessage, IntegrationStatus, View } from "@cubbie/shared/types";
+import { SUGGESTIONS, COMPOSER_PLACEHOLDER } from "../lib/suggestions";
 import cubbieIcon from "../assets/cubbie-icon.png";
 import { chatStamp } from "../lib/dates";
 
 interface Props {
+  view: View;
+  onSyncJobs?: () => void;
   messages: ChatMessage[];
   typing: boolean;
   status: IntegrationStatus | null;
@@ -13,9 +16,7 @@ interface Props {
   focusKey: number;
 }
 
-const SUGGESTIONS = ["what's due this week", "what needs grading", "my applications", "add lab report due friday"];
-
-export function ChatPane({ messages, typing, status, draft, onDraft, onSend, focusKey }: Props) {
+export function ChatPane({ view, messages, typing, status, draft, onDraft, onSend, onSyncJobs, focusKey }: Props) {
   const scroller = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
 
@@ -61,7 +62,8 @@ export function ChatPane({ messages, typing, status, draft, onDraft, onSend, foc
       </div>
 
       <div className="chat-suggest" aria-label="Suggestions">
-        {SUGGESTIONS.map(s => <button key={s} disabled={status?.transport === "local" && status.imessageRelay !== "online"} onClick={() => onSend(s)}>{s}</button>)}
+        {SUGGESTIONS[view].map(s => <button key={s.label} disabled={status?.transport === "local" && status.imessageRelay !== "online"}
+          onClick={() => s.syncJobs && onSyncJobs ? onSyncJobs() : onSend(s.prompt)}>{s.label}</button>)}
       </div>
 
       <form className="composer" onSubmit={e => { e.preventDefault(); submit(); }}>
@@ -69,7 +71,7 @@ export function ChatPane({ messages, typing, status, draft, onDraft, onSend, foc
           ref={input}
           rows={1}
           value={draft}
-          placeholder="iMessage"
+          placeholder={COMPOSER_PLACEHOLDER[view]}
           aria-label="Message Cubbie"
           onChange={e => onDraft(e.target.value)}
           onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); } }}

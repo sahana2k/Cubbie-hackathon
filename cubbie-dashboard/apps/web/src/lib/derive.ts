@@ -4,6 +4,10 @@ import { dayDiff } from "./dates";
 
 export const isOpen = (t: Task) => !VIEWS[t.view].doneStatuses.includes(t.status);
 
+export const isChatConfirmedJob = (task: Task) => task.view === "jobs" &&
+  ["applied", "assessment", "interview"].includes(task.status) && task.job?.stage === task.status &&
+  task.source === "cubbie" && !!task.job.statusMessageId && !!task.job.statusEvidence;
+
 export interface DatedItem { key: string; task: Task; at: string | null; label: string }
 
 /** Every date a student should see for a task: its due date plus job follow-ups, assessment deadlines and students' deadlines. */
@@ -42,9 +46,7 @@ export function summary(view: View, tasks: Task[], now = new Date()): string {
   if (view === "jobs") {
     const oa = open.filter(t => t.job?.stage === "assessment").length;
     const overdueFu = open.filter(t => t.job?.followUpAt && Date.parse(t.job.followUpAt) < now.getTime()).length;
-    const offers = open.filter(t => t.status === "offer").length;
-    const active = open.filter(t => t.status !== "offer").length;
-    return `${plural(active, "active application")}, ${plural(oa, "assessment")} open, ${plural(overdueFu, "follow-up")} overdue` + (offers ? `, ${plural(offers, "offer")} to decide.` : ".");
+    return `${plural(open.length, "confirmed application")}, ${plural(oa, "assessment")} open, ${plural(overdueFu, "follow-up")} overdue.`;
   }
   const overdue = open.filter(t => t.dueAt && Date.parse(t.dueAt) < now.getTime()).length;
   const today = open.filter(t => t.dueAt && Date.parse(t.dueAt) >= now.getTime() && dayDiff(new Date(t.dueAt), now) === 0).length;
@@ -67,7 +69,7 @@ export function isCourseworkTodo(task: Task, now = new Date()): boolean {
 
 /** One coursework selection shared by Board, List, Calendar, and the summary. */
 export function dashboardTasks(tasks: Task[], now = new Date()): Task[] {
-  return tasks.filter(task => task.view !== "student" || (
+  return tasks.filter(task => task.view === "jobs" ? isChatConfirmedJob(task) : task.view !== "student" || (
     task.published !== false &&
     (task.status !== "todo" || isCourseworkTodo(task, now))
   )).map(task => task.view === "student" && task.status === "partial"

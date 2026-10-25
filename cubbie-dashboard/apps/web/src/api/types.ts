@@ -23,6 +23,7 @@ export interface LocalApi {
 
 /** Everything the UI needs. The demo adapter and the live AWS adapter both implement it. */
 export interface Api {
+  syncJobs?(): Promise<{ requested: boolean; imported: number; message: string; historyLimitReached?: boolean }>;
   local?: LocalApi;
   mode: "demo" | "live";
   listTasks(): Promise<Task[]>;

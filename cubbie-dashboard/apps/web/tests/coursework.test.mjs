@@ -47,7 +47,8 @@ test("Todo includes today and day 15, excludes past, day 16, undated and invalid
 test("shared selection preserves in-progress, partial and submitted work with identical list IDs", () => {
   const selected = dashboardTasks([task("todo"), task("far", { dueAt: "2026-12-01T00:00:00-07:00" }),
     task("partial", { status: "partial", dueAt: null }), task("submitted", { status: "done" }),
-    task("grading", { view: "grader", dueAt: null }), task("job", { view: "jobs" })], now);
+    task("grading", { view: "grader", dueAt: null }), task("job", { view: "jobs", status: "applied", source: "cubbie",
+      job: { company: "Fixture", role: "Engineer", stage: "applied", statusMessageId: "chat-1", statusEvidence: "Status: Applied" } })], now);
   assert.deepEqual(selected.map(t => t.id), ["todo", "partial", "submitted", "grading", "job"]);
   assert.equal(selected.find(t => t.id === "partial").status, "in_progress");
   assert.deepEqual(datedItems(selected.filter(t => t.view === "student")).map(i => i.task.id).sort(),
@@ -78,4 +79,31 @@ test("List hides overdue work and Calendar shows only the next seven calendar da
   for (const id of ["day6", "submitted"]) assert.ok(calendar.includes(`Assignment ${id}`));
   for (const id of ["day7", "day15", "overdue", "undated"]) assert.ok(!calendar.includes(`Assignment ${id}`));
   assert.ok(!calendar.includes("Other dates"));
+});
+
+test("Job hunt exposes only three chat-confirmed columns, with no manual stage moves", () => {
+  const { VIEWS } = load(resolve(root, "../../packages/shared/src/views"));
+  assert.deepEqual(VIEWS.jobs.columns.map(column => column.id), ["applied", "assessment", "interview"]);
+  const job = (id, stage, evidence = true) => task(id, { view: "jobs", source: "cubbie", status: stage,
+    job: { company: "Fixture", role: id, stage, ...(evidence ? { statusEvidence: `Status: ${stage}`, statusMessageId: id } : {}) } });
+  const selected = dashboardTasks([job("applied", "applied"), job("interview", "interview"),
+    job("rejected", "rejected"), job("offer", "offer"), job("closed", "closed"), job("unknown", "assessment", false)], now);
+  assert.deepEqual(selected.map(task => task.id), ["applied", "interview"]);
+  const { Board } = load(resolve(root, "src/components/Board"));
+  const html = renderToStaticMarkup(React.createElement(Board, { view: "jobs", tasks: selected, onMove() {}, onOpen() {}, onCreate() {} }));
+  assert.equal((html.match(/class="col wash-/g) ?? []).length, 3);
+  assert.ok(!html.includes('class="add"'));
+  assert.ok(!html.includes('draggable="true"'));
+  assert.ok(!html.includes('aria-label="Offer"'));
+  assert.ok(!html.includes('aria-label="Closed"'));
+});
+
+test("navigation modes have distinct contextual prompt suggestions", () => {
+  const { SUGGESTIONS, COMPOSER_PLACEHOLDER } = load(resolve(root, "src/lib/suggestions"));
+  assert.equal(SUGGESTIONS.student.length, 3);
+  assert.ok(SUGGESTIONS.student.every(suggestion => /coursework|student courses/.test(suggestion.prompt)));
+  assert.ok(SUGGESTIONS.grader.every(suggestion => /TA|grading/.test(suggestion.prompt)));
+  assert.ok(SUGGESTIONS.jobs.every(suggestion => /Gmail/.test(suggestion.prompt)));
+  assert.equal(SUGGESTIONS.jobs[0].syncJobs, true);
+  assert.notEqual(COMPOSER_PLACEHOLDER.student, COMPOSER_PLACEHOLDER.jobs);
 });

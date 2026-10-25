@@ -29,23 +29,23 @@ export function Board({ view, tasks, onMove, onOpen, onCreate }: Props) {
             key={col.id}
             className={`col wash-${col.wash} ${over === col.id ? "over" : ""}`}
             aria-label={col.label}
-            onDragOver={e => { e.preventDefault(); setOver(col.id); }}
+            onDragOver={e => { if (view !== "jobs") { e.preventDefault(); setOver(col.id); } }}
             onDragLeave={() => setOver(o => (o === col.id ? null : o))}
-            onDrop={e => { e.preventDefault(); setOver(null); const id = e.dataTransfer.getData("text/plain"); if (id) onMove(id, col.id); }}
+            onDrop={e => { e.preventDefault(); if (view === "jobs") return; setOver(null); const id = e.dataTransfer.getData("text/plain"); if (id) onMove(id, col.id); }}
           >
             <header className="col-head">
               <div>
                 <h2>{col.label}<span className="n">{items.length}</span></h2>
                 <p>{col.hint}</p>
               </div>
-              <button className="add" onClick={() => setAdding(a => (a === col.id ? null : col.id))} aria-label={`Add to ${col.label}`} aria-expanded={adding === col.id}>+</button>
+              {view !== "jobs" && <button className="add" onClick={() => setAdding(a => (a === col.id ? null : col.id))} aria-label={`Add to ${col.label}`} aria-expanded={adding === col.id}>+</button>}
             </header>
-            {adding === col.id && (
+            {view !== "jobs" && adding === col.id && (
               <QuickAdd view={view} onCancel={() => setAdding(null)} onAdd={d => { onCreate({ ...d, status: col.id }); setAdding(null); }} />
             )}
             <div className="col-body">
               {items.map(t => <TaskCard key={t.id} task={t} onOpen={onOpen} />)}
-              {items.length === 0 && adding !== col.id && <p className="empty">{view === "student" && col.id === "todo" ? "No published coursework due within 15 days." : "Drag a card here, or add one with +"}</p>}
+              {items.length === 0 && adding !== col.id && <p className="empty">{view === "jobs" ? "Cards appear after Cubbie confirms an application’s status. Use Sync Job hunt to check Gmail." : view === "student" && col.id === "todo" ? "No published coursework due within 15 days." : "Drag a card here, or add one with +"}</p>}
             </div>
           </section>
         );

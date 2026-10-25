@@ -13,6 +13,10 @@ export const GradingSchema = z.object({
 });
 
 export const JobSchema = z.object({
+  statusEvidence: z.string().max(1000).nullable().optional(),
+  statusMessageId: z.string().max(300).nullable().optional(),
+  statusAt: nullableIso,
+  interviewAt: nullableIso,
   company: z.string().min(1).max(200),
   role: z.string().min(1).max(200),
   location: z.string().max(200).nullable().optional(),

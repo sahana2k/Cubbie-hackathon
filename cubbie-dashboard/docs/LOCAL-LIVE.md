@@ -20,7 +20,17 @@ Open http://127.0.0.1:8787/ and select **Settings**. Keep this terminal running.
 
 This imports the assignment pages returned by Canvas, not every external LMS tool or every course file. Use the import button to refresh; chat polls automatically, Canvas does not silently sync in the background. Board edits and deletes affect only the local snapshot and can be overwritten/restored by a later Canvas import. Disconnecting clears the in-memory token but retains the imported snapshot. Connecting a different Canvas account removes the previous account's imported Canvas tasks.
 
-## iMessage
+## Job hunt from Cubbie chat
+
+The Job hunt board has only Applied, Assessment, and Interview columns. Its local server imports incoming application-status reports from the selected Cubbie thread during the normal three-second refresh. It does not connect directly to Gmail or reuse a Gmail token from Cubbie. The **Sync Job hunt** button reads up to 10,000 local conversation messages and sends an explicit refresh request to Cubbie, asking it to review its connected Gmail and reply with verified statuses. A successful request is not a completed Gmail sync; cards appear when those replies arrive. A three-second background reader ingests new reports while this local server is running, even when the dashboard tab is closed. It reads the latest 200 messages and sends nothing automatically. If the server was stopped or more history is needed, use manual Sync for the larger backfill.
+
+Reports are readable plain-text blocks: `Company:`, `Role:`, `Status:`, and optionally `Status evidence:`, `Requisition:`, `Applied:`, `Assessment due:`, `Interview at:`, and `Next action:`. A `Company — Role` heading with an explicit `Status:` line is also supported. Unknown or speculative statuses, company mentions, outgoing user prompts, and labeled fictional examples do not produce real cards. If Cubbie replies with unstructured prose, use Sync again to request the supported explicit report; the local server does not invent missing statuses with a language model.
+
+Records are deduplicated by normalized company, role and requisition and scoped to the selected chat. Latest explicit reports update a card. Confirmed rejections remove old cards and remain recorded so stale acknowledgements cannot reopen them. Offers and withdrawals are retained privately but have no visible column. An omitted application is not assumed rejected; different roles at the same company remain separate. Ambiguous updates without a requisition are skipped when multiple matching applications exist. Application dates must be explicit; message receipt time is never substituted. Date-only or timezone-free deadlines stay unverified.
+
+Jobs cannot be dragged between stages or manually created/assigned a status; the confirmed Cubbie report controls the column. A card's drawer shows its status evidence. Notes and priority remain editable. Chat suggestion buttons and the composer placeholder change with Student, TA/Grader and Job hunt. This automatic chat extraction is part of the local Python server; the hosted AWS deployment continues to require its configured Cubbie ingestion Skill and does not gain direct Gmail access from this change.
+
+## iMessage setup
 
 1. Messages on this Mac must already show your Cubbie conversation. Signing in on a phone alone does not establish a local Messages database.
 2. In Settings, enter **Cubbie's** exact phone number (with country code) or iMessage email, found in the conversation's info panel. Do not enter your own number.

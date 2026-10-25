@@ -33,7 +33,6 @@ export function TaskDrawer({ task, onClose, onSave, onDelete, onAsk }: Props) {
 
   const def = VIEWS[task.view];
   const set = <K extends keyof Task>(k: K, v: Task[K]) => setD(x => ({ ...x, [k]: v }));
-  const setJob = (patch: Partial<NonNullable<Task["job"]>>) => setD(x => ({ ...x, job: { ...x.job!, ...patch } }));
   const dirty = JSON.stringify(d) !== JSON.stringify(task);
   const g = task.grading;
   const j = d.job;
@@ -48,12 +47,12 @@ export function TaskDrawer({ task, onClose, onSave, onDelete, onAsk }: Props) {
 
         <label className="field big">
           <span className="sr">Title</span>
-          <input id="drawer-title" value={d.title} onChange={e => set("title", e.target.value)} />
+          <input id="drawer-title" readOnly={task.view === "jobs"} value={d.title} onChange={e => set("title", e.target.value)} />
         </label>
 
         <div className="field-grid">
           <label className="field"><span>Status</span>
-            <select value={d.status} onChange={e => set("status", e.target.value)}>
+            <select disabled={task.view === "jobs"} title={task.view === "jobs" ? "Status is confirmed in the Cubbie chat" : undefined} value={d.status} onChange={e => set("status", e.target.value)}>
               {def.columns.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
             </select>
           </label>
@@ -61,7 +60,7 @@ export function TaskDrawer({ task, onClose, onSave, onDelete, onAsk }: Props) {
             <label className="field"><span>Course</span><input value={d.course ?? ""} onChange={e => set("course", e.target.value || null)} /></label>
           )}
           <label className="field"><span>{task.view === "grader" ? "Grading due" : "Due"}</span>
-            <input type="datetime-local" value={toLocalInput(d.dueAt)} onChange={e => set("dueAt", fromLocalInput(e.target.value))} />
+            <input readOnly={task.view === "jobs"} type="datetime-local" value={toLocalInput(d.dueAt)} onChange={e => set("dueAt", fromLocalInput(e.target.value))} />
           </label>
           <label className="field"><span>Priority</span>
             <select value={d.priority ?? "medium"} onChange={e => set("priority", e.target.value as Task["priority"])}>
@@ -95,10 +94,10 @@ export function TaskDrawer({ task, onClose, onSave, onDelete, onAsk }: Props) {
           <section className="facts">
             <h4>Application</h4>
             <div className="field-grid">
-              <label className="field"><span>Company</span><input value={j.company} onChange={e => setJob({ company: e.target.value })} /></label>
-              <label className="field"><span>Role</span><input value={j.role} onChange={e => setJob({ role: e.target.value })} /></label>
-              <label className="field"><span>Follow up</span><input type="datetime-local" value={toLocalInput(j.followUpAt)} onChange={e => setJob({ followUpAt: fromLocalInput(e.target.value) })} /></label>
-              <label className="field"><span>Next action</span><input value={j.nextAction ?? ""} onChange={e => setJob({ nextAction: e.target.value || null })} /></label>
+              <label className="field"><span>Company</span><input readOnly value={j.company} /></label>
+              <label className="field"><span>Role</span><input readOnly value={j.role} /></label>
+              <label className="field"><span>Follow up</span><input readOnly type="datetime-local" value={toLocalInput(j.followUpAt)} /></label>
+              <label className="field"><span>Next action</span><input readOnly value={j.nextAction ?? ""} /></label>
             </div>
             <dl>
               <dt>Applied on</dt><dd>{j.applicationDate ? `${j.applicationDate} (${j.applicationDateEvidence})` : j.confirmationAt ? `Not evidenced. Confirmation received ${when(j.confirmationAt)}` : "Unknown"}</dd>
@@ -106,6 +105,7 @@ export function TaskDrawer({ task, onClose, onSave, onDelete, onAsk }: Props) {
               <dt>Calendar reminder</dt><dd>{({ none: "None", pending_approval: "Waiting for your OK in iMessage", created: "On Google Calendar", event_only: "Event created, reminders not verified", failed: "Creation failed" } as const)[j.calendarState ?? "none"]}</dd>
               <dt>Verified contacts</dt><dd>{j.verifiedContacts == null ? "Research incomplete" : j.verifiedContacts}</dd>
             </dl>
+            {j.statusEvidence && <><h4>Confirmed in Cubbie chat</h4><p>{j.statusEvidence}</p>{j.statusAt && <p className="fine">{when(j.statusAt)}</p>}</>}
           </section>
         )}
 

@@ -26,6 +26,10 @@ export interface GradingInfo {
 }
 
 export interface JobInfo {
+  statusEvidence?: string | null;
+  statusMessageId?: string | null;
+  statusAt?: string | null;
+  interviewAt?: string | null;
   company: string;
   role: string;
   location?: string | null;

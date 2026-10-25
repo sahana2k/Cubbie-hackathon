@@ -96,6 +96,25 @@ class LocalHttpTests(unittest.TestCase):
             self.assertEqual(self.request('POST', '/api/local/imessage/connect', {'handle': '+15551234567'})[0], 200)
         self.assertEqual(self.request('GET', '/api/chat/messages')[1]['items'][0]['text'], 'Fixture message')
 
+    def test_job_sync_creates_only_confirmed_cards_and_status_is_read_only(self):
+        sent = []
+        class Reader:
+            def rows(self, limit=200):
+                return [{'id': 'job-status-1', 'at': '2026-10-24T18:00:00-07:00', 'direction': 'in',
+                         'text': 'Company: FixtureCo\nRole: Engineer\nStatus: Applied'}]
+            def send(self, text): sent.append(text)
+        self.http.state.messages = Reader()
+        self.http.state.config['handle'] = '+15551234567'
+        code, result = self.request('POST', '/api/local/jobs/sync', {})
+        self.assertEqual(code, 200)
+        self.assertTrue(result['requested'])
+        self.assertEqual(len(sent), 1)
+        self.assertIn('connected Gmail', sent[0])
+        task = self.request('GET', '/api/tasks')[1]['items'][0]
+        self.assertEqual(task['status'], 'applied')
+        self.assertEqual(self.request('PATCH', '/api/tasks/' + task['id'], {'status': 'interview'})[0], 400)
+        self.assertEqual(self.request('POST', '/api/tasks', {'view': 'jobs', 'title': 'Unverified'})[0], 400)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -12,6 +12,7 @@ import { TopBar } from "./components/TopBar";
 import { Upcoming } from "./components/Upcoming";
 import { WeekView } from "./components/WeekView";
 import { dashboardTasks, matches, summary } from "./lib/derive";
+import { SUGGESTIONS } from "./lib/suggestions";
 
 type Tab = "board" | "upcoming" | "week" | "discord" | "settings";
 const TABS: { id: Tab; label: string; icon: IconName }[] = [
@@ -42,6 +43,8 @@ export default function App() {
   const [pane, setPane] = useState<"chat" | "board">("board");
   const [theme, setTheme] = useState(initialTheme);
   const [allViews, setAllViews] = useState(false);
+  const [jobSyncing, setJobSyncing] = useState(false);
+  const [jobSyncNotice, setJobSyncNotice] = useState("");
   const graderAvailable = status?.mode === "demo" || status?.canvas?.graderAvailable === true || (!api.local && tasks.some(t => t.view === "grader"));
 
   useEffect(() => {
@@ -85,6 +88,22 @@ export default function App() {
 
   const guard = async (p: Promise<unknown>) => { try { await p; } catch (e) { setError((e as Error).message); } };
 
+  const syncJobs = async () => {
+    if (jobSyncing) return;
+    setJobSyncing(true); setJobSyncNotice("");
+    try {
+      if (api.syncJobs) {
+        const result = await api.syncJobs();
+        setJobSyncNotice(result.message + (result.historyLimitReached ? " Local history reached its 10,000-message limit; older chat context may be missing." : ""));
+      } else {
+        await api.sendMessage(SUGGESTIONS.jobs[0].prompt);
+        setJobSyncNotice("Asked Cubbie to check Gmail. Your configured Cubbie dashboard sync must publish confirmed updates to this hosted board.");
+      }
+      await load();
+    } catch (e) { setError((e as Error).message); }
+    finally { setJobSyncing(false); }
+  };
+
   const [today, setToday] = useState(() => new Date().toDateString());
   useEffect(() => {
     const timer = window.setInterval(() => setToday(new Date().toDateString()), 30_000);
@@ -97,9 +116,9 @@ export default function App() {
   const ask = (prompt: string) => { setDraft(prompt); setOpenId(null); setPane("chat"); setFocusKey(k => k + 1); };
   const move = (id: string, statusId: string) => {
     const t = tasks.find(x => x.id === id); if (!t || t.status === statusId) return;
+    if (t.view === "jobs") return;
     const patch: Partial<Task> = { status: statusId };
-    if (VIEWS[t.view].doneStatuses.includes(statusId) && t.view !== "jobs") patch.progress = 100;
-    if (t.view === "jobs" && t.job) patch.job = { ...t.job, stage: statusId === "closed" ? "rejected" : (statusId as NonNullable<Task["job"]>["stage"]) };
+    if (VIEWS[t.view].doneStatuses.includes(statusId)) patch.progress = 100;
     setTasks(ts => ts.map(x => (x.id === id ? { ...x, ...patch } : x)));
     void guard(api.updateTask(id, patch));
   };
@@ -113,7 +132,7 @@ export default function App() {
         onReset={api.reset ? () => void api.reset!().then(load) : undefined} />
 
       <main className="split">
-        <ChatPane messages={messages} typing={typing} status={status} draft={draft} onDraft={setDraft} focusKey={focusKey}
+        <ChatPane view={view} onSyncJobs={() => void syncJobs()} messages={messages} typing={typing} status={status} draft={draft} onDraft={setDraft} focusKey={focusKey}
           onSend={text => void guard(api.sendMessage(text))} />
 
         <section className="work" aria-label="Dashboard">
@@ -123,6 +142,8 @@ export default function App() {
               <p className="summary">{tab === "settings" ? "Connect iMessage, Cubbie and Discord." : summary(view, visible)}</p>
             </div>
             <div className="tabs" role="tablist" aria-label="Dashboard sections">
+              {view === "jobs" && tab !== "settings" && tab !== "discord" && <button className="job-sync" disabled={jobSyncing || (status?.transport === "local" && status.imessageRelay !== "online")}
+                onClick={() => void syncJobs()}>{jobSyncing ? "Requesting updates…" : "Sync Job hunt"}</button>}
               {TABS.map(t => (
                 <button key={t.id} role="tab" aria-selected={tab === t.id} className={tab === t.id ? "on" : ""} onClick={() => setTab(t.id)}><Icon name={t.icon} />{t.label}</button>
               ))}
@@ -130,6 +151,7 @@ export default function App() {
           </div>
 
           {error && <p className="error" role="alert">{error} <button onClick={() => { setError(null); void load(); }}>Reload</button></p>}
+          {view === "jobs" && jobSyncNotice && <p className="job-sync-notice" role="status">{jobSyncNotice}</p>}
 
           <div className="work-body">
             {tab === "board" && <Board view={view} tasks={visible} onMove={move} onOpen={setOpenId} onCreate={(d: TaskDraft) => void guard(api.createTask(d))} />}

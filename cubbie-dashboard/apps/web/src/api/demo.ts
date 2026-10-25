@@ -36,6 +36,21 @@ export function createDemoApi(): Api {
 
   const api: Api = {
     mode: "demo",
+    async syncJobs() {
+      let imported = 0;
+      for (const task of state.tasks.filter(task => task.view === "jobs" && task.job && ["applied", "assessment", "interview"].includes(task.job.stage))) {
+        const job = task.job!;
+        const id = "demo-job-status-" + task.id;
+        const evidence = "Status: " + job.stage;
+        if (!state.chat.some(message => message.id === id)) state.chat.push({ id, direction: "in", at: new Date().toISOString(),
+          text: `Fictional demo\nCompany: ${job.company}\nRole: ${job.role}\n${evidence}` });
+        putTask({ ...task, source: "cubbie", status: job.stage, job: { ...job, statusMessageId: id, statusEvidence: evidence } });
+        imported++;
+      }
+      for (const message of state.chat) emit({ type: "chat.upsert", message });
+      save();
+      return { requested: false, imported, message: "Demo application cards updated from fictional chat statuses. No Gmail account was accessed." };
+    },
     async listTasks() { return structuredClone(state.tasks); },
     async createTask(d: TaskDraft) {
       const now = new Date().toISOString();

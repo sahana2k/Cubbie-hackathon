@@ -19,9 +19,8 @@ export function createLocalApi(base: string): Api {
     if (polling || !listeners.size) return;
     polling = true;
     try {
-      const [tasks, messages] = await Promise.all([
-        call<{ items: Task[] }>("/tasks"), call<{ items: ChatMessage[] }>("/chat/messages")
-      ]);
+      const messages = await call<{ items: ChatMessage[] }>("/chat/messages");
+      const tasks = await call<{ items: Task[] }>("/tasks");
       const status = await call<IntegrationStatus>("/integrations/status");
       const events: RealtimeEvent[] = [{ type: "tasks.snapshot", tasks: tasks.items },
         { type: "chat.snapshot", messages: messages.items }, { type: "status", status }];
@@ -42,6 +41,7 @@ export function createLocalApi(base: string): Api {
   const unavailable = async (): Promise<never> => { throw new Error("This action needs the deployed AWS connection. It is not enabled on this local dashboard."); };
   return {
     mode: "live",
+    syncJobs: () => change("/local/jobs/sync"),
     local: {
       connections: () => call("/local/connections"),
       connectCanvas: (url, token) => change("/local/canvas/connect", { url, token }),

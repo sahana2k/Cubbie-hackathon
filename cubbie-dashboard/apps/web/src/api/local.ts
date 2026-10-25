@@ -45,7 +45,7 @@ export function createLocalApi(base: string): Api {
     local: {
       connections: () => call("/local/connections"),
       connectCanvas: (url, token) => change("/local/canvas/connect", { url, token }),
-      syncCanvas: courses => change("/local/canvas/sync", { courses }),
+      syncCanvas: (courses, includeOtherCourses = false) => change("/local/canvas/sync", { courses, includeOtherCourses }),
       disconnectCanvas: () => change("/local/canvas/disconnect"),
       connectMessages: handle => change("/local/imessage/connect", { handle }),
       disconnectMessages: () => change("/local/imessage/disconnect")

@@ -1,6 +1,8 @@
 """Read-only personal Canvas API connection. Tokens stay in process memory."""
 import json
 import re
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
@@ -8,6 +10,63 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 class ConnectionError(Exception):
     pass
+
+
+def current_term(at=None):
+    local = (at or datetime.now(timezone.utc)).astimezone(ZoneInfo('America/Phoenix'))
+    season = 'Spring' if local.month <= 4 else 'Summer' if local.month <= 7 else 'Fall'
+    return season, local.year
+
+
+def course_activity(course, at=None):
+    """Prefer Canvas dates; a year+semester label is a fallback, not proof of enrollment."""
+    at = at or datetime.now(timezone.utc)
+    if course.get('workflowState') in ('completed', 'deleted'):
+        return 'past', 'Canvas marks this course concluded'
+    use_course_dates = course.get('restrictToCourseDates') or not (course.get('termStart') or course.get('termEnd'))
+    start = course.get('courseStart') if use_course_dates else course.get('termStart')
+    end = course.get('courseEnd') if use_course_dates else course.get('termEnd')
+    def parse(value):
+        if not value:
+            return None
+        try:
+            parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
+            return parsed if parsed.tzinfo else None
+        except (ValueError, AttributeError):
+            return None
+    start, end = parse(start), parse(end)
+    if end and at >= end:
+        return 'past', 'Canvas end date has passed'
+    if start and at < start:
+        return 'future', 'Canvas start date is in the future'
+    if course.get('accessRestrictedByDate'):
+        return 'unknown', 'Canvas reports a date access restriction'
+    if start and end:
+        return 'current', 'Within Canvas course/term dates'
+    season, year = current_term(at)
+    # A term object takes priority over a nickname/title when it names a semester and year.
+    for label in (course.get('termName') or '', course.get('name') or ''):
+        years = re.findall(r'\b20\d{2}\b', label)
+        seasons = re.findall(r'\b(spring|summer|fall|autumn)\b', label, flags=re.I)
+        if len(set(years)) == 1 and len({s.lower() for s in seasons}) == 1:
+            named_year = int(years[0])
+            named_season = seasons[0].lower().replace('autumn', 'fall').title()
+            order = {'Spring': 0, 'Summer': 1, 'Fall': 2}
+            actual, target = (year, order[season]), (named_year, order[named_season])
+            activity = 'current' if target == actual else 'past' if target < actual else 'future'
+            return activity, f'{named_season} {named_year} label; complete dates not available'
+    return 'unknown', 'Current term could not be established from Canvas dates or term label'
+
+
+def course_defaults(courses, include_other=False, at=None):
+    result = []
+    for course in courses:
+        activity, reason = course_activity(course, at)
+        value = {**course, 'activity': activity, 'activityReason': reason}
+        if activity != 'current' and not include_other:
+            value['view'] = 'skip'
+        result.append(value)
+    return result
 
 
 class NoRedirect(HTTPRedirectHandler):
@@ -66,7 +125,7 @@ class Canvas:
         return rows
 
     def courses(self):
-        rows = self.pages('/api/v1/courses?per_page=100&enrollment_state=active&include[]=enrollments')
+        rows = self.pages('/api/v1/courses?per_page=100&enrollment_state=active&include[]=enrollments&include[]=term')
         result = []
         for course in rows:
             roles = [str(e.get('type', e.get('role', ''))).lower() for e in course.get('enrollments', [])]
@@ -76,9 +135,15 @@ class Canvas:
                 view = 'student'
             else:
                 view = 'skip'
+            term = course.get('term') or {}
             result.append({'id': course['id'], 'name': course.get('name') or course.get('course_code') or str(course['id']),
-                           'roles': roles, 'view': view})
-        return result
+                           'roles': roles, 'view': view, 'enrollmentView': view,
+                           'termName': term.get('name'), 'termStart': term.get('start_at'), 'termEnd': term.get('end_at'),
+                           'courseStart': course.get('start_at'), 'courseEnd': course.get('end_at'),
+                           'restrictToCourseDates': course.get('restrict_enrollments_to_course_dates', False),
+                           'accessRestrictedByDate': course.get('access_restricted_by_date', False),
+                           'workflowState': course.get('workflow_state')})
+        return course_defaults(result)
 
     def assignments(self, course):
         query = urlencode({'per_page': 100, 'include[]': 'submission' if course['view'] == 'student' else 'all_dates'})

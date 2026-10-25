@@ -71,7 +71,8 @@ class LocalHttpTests(unittest.TestCase):
             def get(self, _):
                 return {'id': 7, 'name': 'Fixture account'}, ''
             def courses(self):
-                return [{'id': 10, 'name': 'Fixture course', 'roles': ['ta'], 'view': 'grader'}]
+                return [{'id': 10, 'name': 'Fixture course', 'roles': ['ta'], 'view': 'grader',
+                         'termStart': '2000-01-01T00:00:00Z', 'termEnd': '2100-01-01T00:00:00Z'}]
             def assignments(self, _):
                 return [{'id': 42, 'name': 'Fixture assignment', 'due_at': '2026-11-02T06:59:00Z'}]
         with patch('server.Canvas', FakeCanvas):

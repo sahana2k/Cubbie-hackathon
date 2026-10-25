@@ -10,11 +10,13 @@ export function LocalConnections({ local, status, onError }: {
   const [token, setToken] = useState("");
   const [handle, setHandle] = useState("");
   const [courses, setCourses] = useState<LocalCourse[]>([]);
+  const [showOther, setShowOther] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
   const load = async () => {
     const value = await local.connections();
     setConnection(value); setUrl(value.canvasUrl); setHandle(value.handle); setCourses(value.courses);
+    setShowOther(value.includeOtherCourses ?? false);
   };
   useEffect(() => { void load().catch(error => onError((error as Error).message)); }, [local]);
   const run = async (action: string, fn: () => Promise<void>) => {
@@ -30,7 +32,8 @@ export function LocalConnections({ local, status, onError }: {
       <form onSubmit={event => { event.preventDefault(); void run("canvas", async () => {
         try {
           const result = await local.connectCanvas(url, token);
-          setConnection(result); setCourses(result.courses); setNotice("Canvas connected. Choose the courses to import below.");
+          setConnection(result); setCourses(result.courses); setShowOther(result.includeOtherCourses ?? false);
+          setNotice(`Canvas connected. Current courses for ${result.currentTermLabel ?? "this term"} are selected, including your TA/grader courses.`);
         } finally { setToken(""); }
       }); }}>
         <label className="field"><span>Canvas address</span><input type="url" value={url} required onChange={event => setUrl(event.target.value)} /></label>
@@ -39,20 +42,27 @@ export function LocalConnections({ local, status, onError }: {
         <button className="primary" disabled={busy !== null || !token.trim()}>{busy === "canvas" ? "Connecting…" : "Connect Canvas"}</button>
       </form>
       {courses.length > 0 && <>
+        <p><strong>{connection?.currentTermLabel ?? "Current term"}</strong> · Current student and TA/grader courses</p>
+        <label className="toggle"><input type="checkbox" checked={showOther} onChange={event => {
+          const checked = event.target.checked; setShowOther(checked);
+          if (!checked) setCourses(values => values.map(course => course.activity !== "current" ? { ...course, view: "skip" } : course));
+        }} /> Show other courses ({courses.filter(course => course.activity !== "current").length})</label>
         <div className="local-courses">
-          {courses.map(course => <label className="local-course" key={course.id}>
-            <span>{course.name}<small>{course.roles.join(", ") || "Choose your role"}</small></span>
+          {courses.filter(course => showOther || course.activity === "current").map(course => <label className="local-course" key={course.id}>
+            <span>{course.name}<small>{course.roles.join(", ") || "Choose your role"}{course.termName ? ` · ${course.termName}` : ""}</small>
+              {course.activityReason && <small>{course.activityReason}</small>}</span>
             <select aria-label={`Role for ${course.name}`} value={course.view} onChange={event => setCourses(values => values.map(value =>
               value.id === course.id ? { ...value, view: event.target.value as LocalCourse["view"] } : value))}>
               <option value="skip">Skip</option><option value="student">Student</option><option value="grader">TA / grader</option>
             </select>
           </label>)}
         </div>
-        <p className="fine">Choose the courses you want on this board. Import reads Canvas; editing a card here does not change Canvas. Counts are shown only when Canvas provides them.</p>
+        {!courses.some(course => course.activity === "current") && <p className="fine">No current courses could be established. Use Show other courses to review the available dates and labels.</p>}
+        <p className="fine">Current courses use Canvas dates where available, otherwise the semester and year in the term name. Older, future, and undated courses are skipped by default. Import reads Canvas; editing a card here does not change Canvas.</p>
         <div className="row">
           <button className="primary" disabled={busy !== null || !connection?.canvasConnected || !courses.some(course => course.view !== "skip")}
             onClick={() => void run("sync", async () => {
-              const result = await local.syncCanvas(courses.filter(course => course.view !== "skip").map(({ id, view }) => ({ id, view })));
+              const result = await local.syncCanvas(courses.filter(course => course.view !== "skip" && (showOther || course.activity === "current")).map(({ id, view }) => ({ id, view })), showOther);
               await load(); setNotice(`Imported ${result.imported} assignments.${result.coverageNotes.length ? " Some courses could not be read; see below." : ""}`);
             })}>{busy === "sync" ? "Importing assignments…" : "Import selected courses"}</button>
           <button className="ghost" disabled={busy !== null || !connection?.canvasConnected} onClick={() => void run("disconnect", async () => {

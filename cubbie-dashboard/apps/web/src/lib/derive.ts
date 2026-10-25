@@ -10,7 +10,7 @@ export interface DatedItem { key: string; task: Task; at: string | null; label: 
 export function datedItems(tasks: Task[]): DatedItem[] {
   const out: DatedItem[] = [];
   for (const t of tasks) {
-    if (!isOpen(t)) continue;
+    if (t.view !== "student" && !isOpen(t)) continue;
     const primary = t.view === "jobs" ? (t.job?.nextAction ?? t.title) : t.title;
     out.push({ key: `${t.id}:due`, task: t, at: t.dueAt ?? null, label: primary });
     if (t.job?.followUpAt && t.job.followUpAt !== t.dueAt) out.push({ key: `${t.id}:fu`, task: t, at: t.job.followUpAt, label: "Follow up" });
@@ -50,4 +50,26 @@ export function summary(view: View, tasks: Task[], now = new Date()): string {
   const today = open.filter(t => t.dueAt && Date.parse(t.dueAt) >= now.getTime() && dayDiff(new Date(t.dueAt), now) === 0).length;
   const week = open.filter(t => t.dueAt && Date.parse(t.dueAt) >= now.getTime() && dayDiff(new Date(t.dueAt), now) < 7).length;
   return `${plural(today, "thing")} due today, ${overdue} overdue, ${week} due in the next 7 days.`;
+}
+
+/** Todo includes published coursework due today through the end of day 15. */
+export function isCourseworkTodo(task: Task, now = new Date()): boolean {
+  // Older imports predate publication metadata. Keep those visible until a
+  // fresh Canvas sync can supply it; explicit unpublished records stay hidden.
+  if (task.published === false || !task.dueAt) return false;
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 16);
+  const due = Date.parse(task.dueAt);
+  return due >= start.getTime() && due < end.getTime();
+}
+
+/** One coursework selection shared by Board, List, Calendar, and the summary. */
+export function dashboardTasks(tasks: Task[], now = new Date()): Task[] {
+  return tasks.filter(task => task.view !== "student" || (
+    task.published !== false &&
+    (task.status !== "todo" || isCourseworkTodo(task, now))
+  )).map(task => task.view === "student" && task.status === "partial"
+    ? { ...task, status: "in_progress" } : task);
 }

@@ -108,7 +108,10 @@ class State:
         return {'mode': 'live', 'transport': 'local',
                 'imessageRelay': 'online' if self.messages and not self.messages_error else 'offline' if self.messages else 'not_set_up',
                 'relayDevice': 'this Mac', 'discord': 'not_linked',
-                'canvas': {'connected': self.canvas is not None, 'lastSync': self.config.get('lastCanvasSync'),
+                'canvas': {'connected': self.canvas is not None,
+                           'graderAvailable': any(c.get('enrollmentView') == 'grader' or any(r in ('ta', 'teacher', 'taenrollment', 'teacherenrollment') for r in c.get('roles', []))
+                                                  for c in self.connections()['courses']
+                                                  if self.config.get('includeOtherCourses', False) or c.get('activity') == 'current'), 'lastSync': self.config.get('lastCanvasSync'),
                            'error': self.canvas_error, 'coverageNotes': self.config.get('coverageNotes', [])},
                 'imessageError': self.messages_error}
 

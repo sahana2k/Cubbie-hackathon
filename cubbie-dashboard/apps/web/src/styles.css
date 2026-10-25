@@ -85,7 +85,7 @@ button { cursor: pointer; }
 /* ---------- iMessage pane ---------- */
 .chat { min-height: 0; display: grid; grid-template-rows: auto 1fr auto auto; background: var(--chat-bg); border-right: 1px solid var(--line); font-family: var(--apple); }
 .chat-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--chat-line); }
-.avatar { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; font: 600 20px/1 var(--display); color: #fff; background: radial-gradient(circle at 30% 30%, #6fb1ff, #0a84ff 70%); }
+.avatar { width: 38px; height: 38px; flex: none; display: block; object-fit: contain; border-radius: 9px; }
 .who { display: grid; }
 .who strong { font-size: 15px; }
 .who span { font-size: 12px; color: var(--chat-meta); }
@@ -302,3 +302,19 @@ button { cursor: pointer; }
 .local-notice { padding: 16px; border-radius: 12px; background: #edf7f0; color: #215a36; }
 .message-image { display: block; margin-top: 6px; }
 .message-image img { display: block; max-width: 100%; height: auto; border-radius: 12px; }
+
+/* Navigation icons and panel controls. */
+.menu-icon { width: 18px; height: 18px; flex: none; vertical-align: middle; }
+.view-switch button, .pane-switch button, .tabs button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+button:disabled { cursor: not-allowed; opacity: .45; }
+.nav-toggle { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 999px; background: var(--card); padding: 6px 10px; font-size: 13px; font-weight: 600; white-space: nowrap; }
+.nav-toggle span { color: var(--ink-3); font-size: 12px; }
+.nav-toggle.on, .icon-btn.on { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.nav-toggle.on span { color: var(--accent); }
+@media (min-width: 901px) and (max-width: 1400px) { .topbar { flex-wrap: wrap; } .search { min-width: 180px; } }
+@media (max-width: 600px) { .brand-sub { display: none; } .status-pills { gap: 5px; } .topbar .view-switch { order: 3; } .view-switch button { padding: 5px 8px; } }
+
+.ev small { color: var(--ink-2); font-size: 11px; }
+
+.ev { min-width: 0; }
+.ev-title { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }

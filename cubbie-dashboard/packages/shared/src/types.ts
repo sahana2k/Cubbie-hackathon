@@ -51,6 +51,7 @@ export interface Task {
   dueAt?: string | null;
   /** Shown when dueAt is null: "No due date" (explicitly unset) vs "Deadline unavailable" (not retrieved). */
   dueLabel?: string | null;
+  published?: boolean;
   progress?: number;
   points?: number | null;
   priority?: "low" | "medium" | "high";
@@ -88,7 +89,7 @@ export interface DiscordMessage {
 
 export interface IntegrationStatus {
   transport?: "local";
-  canvas?: { connected: boolean; lastSync?: string | null; error?: string | null; coverageNotes?: string[] };
+  canvas?: { connected: boolean; graderAvailable?: boolean; lastSync?: string | null; error?: string | null; coverageNotes?: string[] };
   imessageError?: string | null;
   imessageRelay: "online" | "offline" | "not_set_up";
   relayDevice?: string | null;

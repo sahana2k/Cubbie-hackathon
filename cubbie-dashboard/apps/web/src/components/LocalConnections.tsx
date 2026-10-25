@@ -27,7 +27,7 @@ export function LocalConnections({ local, status, onError }: {
     <section className="set-card">
       <header><h3>Canvas</h3><span className={`pill ${connection?.canvasConnected ? "ok" : "warn"}`}>
         <i />{connection?.canvasConnected ? "Connected" : "Not connected"}</span></header>
-      <p>Import real assignments into Classes and Grading. Your token stays in this server’s memory and must be entered again after a restart.</p>
+      <p>Import real assignments into Coursework and Grading. Your token stays in this server’s memory and must be entered again after a restart.</p>
       {connection?.canvasAccount && <p className="fine">Canvas account: {connection.canvasAccount}</p>}
       <form onSubmit={event => { event.preventDefault(); void run("canvas", async () => {
         try {
@@ -53,7 +53,7 @@ export function LocalConnections({ local, status, onError }: {
               {course.activityReason && <small>{course.activityReason}</small>}</span>
             <select aria-label={`Role for ${course.name}`} value={course.view} onChange={event => setCourses(values => values.map(value =>
               value.id === course.id ? { ...value, view: event.target.value as LocalCourse["view"] } : value))}>
-              <option value="skip">Skip</option><option value="student">Student</option><option value="grader">TA / grader</option>
+              <option value="skip">Skip</option><option value="student">Student</option>{(course.enrollmentView === "grader" || course.roles.some(role => ["ta", "teacher", "taenrollment", "teacherenrollment"].includes(role))) && <option value="grader">TA / grader</option>}
             </select>
           </label>)}
         </div>

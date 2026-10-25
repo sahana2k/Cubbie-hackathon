@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { ChatMessage, IntegrationStatus } from "@cubbie/shared/types";
+import cubbieIcon from "../assets/cubbie-icon.png";
 import { chatStamp } from "../lib/dates";
 
 interface Props {
@@ -27,7 +28,7 @@ export function ChatPane({ messages, typing, status, draft, onDraft, onSend, foc
   return (
     <section className="chat" aria-label="iMessage conversation with Cubbie">
       <header className="chat-head">
-        <div className="avatar" aria-hidden="true">c</div>
+        <img className="avatar" src={cubbieIcon} alt="" width="38" height="38" />
         <div className="who">
           <strong>Cubbie</strong>
           <span>{status?.imessageRelay === "online" ? `iMessage, synced through ${status.relayDevice ?? "your Mac"}` : status?.transport === "local" ? "Connect your Cubbie conversation in Settings." : "iMessage relay offline. Messages will send when your Mac reconnects."}</span>

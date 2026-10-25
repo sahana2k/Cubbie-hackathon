@@ -4,6 +4,7 @@ export type TaskDraft = Partial<Task> & Pick<Task, "view" | "status" | "title" |
 
 export interface LocalCourse {
   id: number; name: string; roles: string[]; view: "student" | "grader" | "skip";
+  enrollmentView?: "student" | "grader" | "skip";
   activity?: "current" | "past" | "future" | "unknown"; activityReason?: string; termName?: string;
 }
 export interface LocalConnections {

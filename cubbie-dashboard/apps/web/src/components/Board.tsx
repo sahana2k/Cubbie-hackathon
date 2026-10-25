@@ -45,7 +45,7 @@ export function Board({ view, tasks, onMove, onOpen, onCreate }: Props) {
             )}
             <div className="col-body">
               {items.map(t => <TaskCard key={t.id} task={t} onOpen={onOpen} />)}
-              {items.length === 0 && adding !== col.id && <p className="empty">Drag a card here, or add one with +</p>}
+              {items.length === 0 && adding !== col.id && <p className="empty">{view === "student" && col.id === "todo" ? "No published coursework due within 15 days." : "Drag a card here, or add one with +"}</p>}
             </div>
           </section>
         );
@@ -63,7 +63,7 @@ function QuickAdd({ view, onAdd, onCancel }: { view: View; onAdd: (d: Omit<TaskD
     if (!a.trim() || (jobs && !b.trim())) return;
     const dueAt = fromLocalInput(due);
     if (jobs) onAdd({ view, kind: "application", title: "Application submitted", dueAt, source: "manual", job: { company: a.trim(), role: b.trim(), stage: "applied", followUpAt: dueAt, nextAction: dueAt ? "Follow up" : null } });
-    else onAdd({ view, kind: view === "grader" ? "grading" : "assignment", title: a.trim(), course: b.trim() || null, dueAt, dueLabel: dueAt ? null : "No due date", source: "manual", progress: 0 });
+    else onAdd({ view, kind: view === "grader" ? "grading" : "assignment", title: a.trim(), published: true, course: b.trim() || null, dueAt, dueLabel: dueAt ? null : "No due date", source: "manual", progress: 0 });
   };
   return (
     <form className="quick-add" onSubmit={e => { e.preventDefault(); submit(); }} onKeyDown={e => e.key === "Escape" && onCancel()}>

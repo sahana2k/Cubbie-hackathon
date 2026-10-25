@@ -24,6 +24,13 @@ class CanvasTests(unittest.TestCase):
         client.get = lambda path: next(responses)
         self.assertEqual([row['id'] for row in client.pages('/api/v1/courses')], [1, 2])
 
+    def test_assignment_publication_preserves_false_without_inventing_unknown(self):
+        course = {'id': 1, 'name': 'Course', 'view': 'student'}
+        for published in (True, False, None):
+            with self.subTest(published=published):
+                assignment = {'id': 2, 'published': published}
+                self.assertIs(assignment_task(course, assignment, 'now').get('published'), published)
+
     def test_grading_deadline_is_not_student_deadline(self):
         task = assignment_task({'id': 1, 'name': 'Test course', 'view': 'grader'},
                                {'id': 2, 'name': 'Lab', 'due_at': '2026-11-02T06:59:00Z', 'needs_grading_count': 5}, 'now')
@@ -133,6 +140,22 @@ class StorageTests(unittest.TestCase):
             self.assertEqual(state.tasks()[0]['status'], 'in_progress')
             state.put_tasks([{**task, 'status': 'todo'}], preserve_board_status=True)
             self.assertEqual(state.tasks()[0]['status'], 'in_progress')
+
+    def test_grader_availability_matches_visible_canvas_role_options(self):
+        with tempfile.TemporaryDirectory() as folder:
+            state = State(Path(folder))
+            self.assertFalse(state.status()['canvas']['graderAvailable'])
+            student = {'id': 1, 'name': 'Student', 'roles': ['student'], 'view': 'student',
+                       'termStart': '2000-01-01T00:00:00Z', 'termEnd': '2100-01-01T00:00:00Z'}
+            staff = {**student, 'id': 2, 'roles': ['ta'], 'view': 'grader'}
+            state.config['courses'] = [student]
+            self.assertFalse(state.status()['canvas']['graderAvailable'])
+            state.config['courses'].append(staff)
+            self.assertTrue(state.status()['canvas']['graderAvailable'])
+            staff['termEnd'] = '2001-01-01T00:00:00Z'
+            self.assertFalse(state.status()['canvas']['graderAvailable'])
+            state.config['includeOtherCourses'] = True
+            self.assertTrue(state.status()['canvas']['graderAvailable'])
 
     def test_no_demo_or_credentials_are_saved(self):
         with tempfile.TemporaryDirectory() as folder:

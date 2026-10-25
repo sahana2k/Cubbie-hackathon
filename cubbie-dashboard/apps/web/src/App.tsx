@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ChatMessage, DiscordMessage, IntegrationStatus, RealtimeEvent, Task, View } from "@cubbie/shared/types";
 import { VIEWS } from "@cubbie/shared/views";
 import { api, type TaskDraft } from "./api";
+import { Icon, type IconName } from "./components/Icon";
 import { Board } from "./components/Board";
 import { ChatPane } from "./components/ChatPane";
 import { DiscordPanel } from "./components/DiscordPanel";
@@ -10,11 +11,11 @@ import { TaskDrawer } from "./components/TaskDrawer";
 import { TopBar } from "./components/TopBar";
 import { Upcoming } from "./components/Upcoming";
 import { WeekView } from "./components/WeekView";
-import { matches, summary } from "./lib/derive";
+import { dashboardTasks, matches, summary } from "./lib/derive";
 
 type Tab = "board" | "upcoming" | "week" | "discord" | "settings";
-const TABS: { id: Tab; label: string }[] = [
-  { id: "board", label: "Board" }, { id: "upcoming", label: "Upcoming" }, { id: "week", label: "Next 7 days" }, { id: "discord", label: "Discord" }, { id: "settings", label: "Settings" }
+const TABS: { id: Tab; label: string; icon: IconName }[] = [
+  { id: "board", label: "Board", icon: "board" }, { id: "upcoming", label: "List view", icon: "list" }, { id: "week", label: "Calendar view", icon: "calendar" }
 ];
 
 function initialView(): View {
@@ -41,6 +42,12 @@ export default function App() {
   const [pane, setPane] = useState<"chat" | "board">("board");
   const [theme, setTheme] = useState(initialTheme);
   const [allViews, setAllViews] = useState(false);
+  const graderAvailable = status?.mode === "demo" || status?.canvas?.graderAvailable === true || (!api.local && tasks.some(t => t.view === "grader"));
+
+  useEffect(() => {
+    if (status && !graderAvailable && view === "grader") setView("student");
+  }, [graderAvailable, view, status]);
+
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -78,7 +85,13 @@ export default function App() {
 
   const guard = async (p: Promise<unknown>) => { try { await p; } catch (e) { setError((e as Error).message); } };
 
-  const visible = useMemo(() => tasks.filter(t => (allViews && tab === "upcoming" ? true : t.view === view) && matches(t, query)), [tasks, view, query, allViews, tab]);
+  const [today, setToday] = useState(() => new Date().toDateString());
+  useEffect(() => {
+    const timer = window.setInterval(() => setToday(new Date().toDateString()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const selectedTasks = useMemo(() => dashboardTasks(tasks), [tasks, today]);
+  const visible = useMemo(() => selectedTasks.filter(t => (allViews && tab === "upcoming" ? true : t.view === view) && matches(t, query)), [selectedTasks, view, query, allViews, tab]);
   const openTask = tasks.find(t => t.id === openId) ?? null;
 
   const ask = (prompt: string) => { setDraft(prompt); setOpenId(null); setPane("chat"); setFocusKey(k => k + 1); };
@@ -95,6 +108,8 @@ export default function App() {
     <div className={`app pane-${pane}`}>
       <TopBar view={view} onView={v => { setView(v); setPane("board"); }} query={query} onQuery={setQuery} status={status}
         theme={theme} onTheme={() => setTheme(t => (t === "dark" ? "light" : "dark"))} pane={pane} onPane={setPane}
+        graderAvailable={graderAvailable} settingsOpen={tab === "settings"} onSettings={() => { setTab(t => t === "settings" ? "board" : "settings"); setPane("board"); }}
+        discordOpen={tab === "discord"} onDiscord={() => { setTab(t => t === "discord" ? "board" : "discord"); setPane("board"); }}
         onReset={api.reset ? () => void api.reset!().then(load) : undefined} />
 
       <main className="split">
@@ -104,12 +119,12 @@ export default function App() {
         <section className="work" aria-label="Dashboard">
           <div className="work-head">
             <div>
-              <h1>{tab === "settings" ? "Settings" : view === "student" ? "Classes" : view === "grader" ? "Grading" : "Job hunt"}</h1>
-              <p className="summary">{tab === "settings" ? "Connect iMessage, Cubbie and Discord." : summary(view, tasks)}</p>
+              <h1>{tab === "settings" ? "Settings" : tab === "discord" ? "Discord" : view === "student" ? "Coursework" : view === "grader" ? "Grading" : "Job hunt"}</h1>
+              <p className="summary">{tab === "settings" ? "Connect iMessage, Cubbie and Discord." : summary(view, visible)}</p>
             </div>
             <div className="tabs" role="tablist" aria-label="Dashboard sections">
               {TABS.map(t => (
-                <button key={t.id} role="tab" aria-selected={tab === t.id} className={tab === t.id ? "on" : ""} onClick={() => setTab(t.id)}>{t.label}</button>
+                <button key={t.id} role="tab" aria-selected={tab === t.id} className={tab === t.id ? "on" : ""} onClick={() => setTab(t.id)}><Icon name={t.icon} />{t.label}</button>
               ))}
             </div>
           </div>
@@ -120,7 +135,7 @@ export default function App() {
             {tab === "board" && <Board view={view} tasks={visible} onMove={move} onOpen={setOpenId} onCreate={(d: TaskDraft) => void guard(api.createTask(d))} />}
             {tab === "upcoming" && (
               <>
-                <label className="toggle"><input type="checkbox" checked={allViews} onChange={e => setAllViews(e.target.checked)} /> Show classes, grading and jobs together</label>
+                <label className="toggle"><input type="checkbox" checked={allViews} onChange={e => setAllViews(e.target.checked)} /> Show coursework, grading and jobs together</label>
                 <Upcoming tasks={visible} onOpen={setOpenId} showView={allViews} />
               </>
             )}

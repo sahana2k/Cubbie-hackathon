@@ -8,6 +8,7 @@
     "build": "tsc --noEmit && vite build",
     "build:preview": "vite build --mode preview",
     "typecheck": "tsc --noEmit",
+    "test": "TZ=America/Phoenix node --test tests/*.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

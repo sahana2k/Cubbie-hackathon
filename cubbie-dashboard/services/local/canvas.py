@@ -177,6 +177,8 @@ def assignment_task(course, assignment, now):
         'url': assignment.get('html_url'), 'createdAt': now, 'updatedAt': now,
         'notes': 'Multiple student deadlines; open Canvas for section/student details.' if multiple else None,
     }
+    if isinstance(assignment.get('published'), bool):
+        task['published'] = assignment['published']
     if grading:
         task['grading'] = {'studentDueAt': due, 'gradingDueAt': None, 'needsGrading': needs,
                            'studentsSubmitted': None, 'eligibleStudents': None,

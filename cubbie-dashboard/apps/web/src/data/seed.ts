@@ -6,7 +6,7 @@ export function seedTasks(now = new Date()): Task[] {
   const at = (days: number, h: number, m = 0) => { const d = addDays(now, days); d.setHours(h, m, 0, 0); return d.toISOString(); };
   const ymd = (days: number) => { const d = addDays(now, days); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
   const created = addDays(now, -14).toISOString();
-  const t = (x: Omit<Task, "createdAt" | "updatedAt">): Task => ({ ...x, createdAt: created, updatedAt: created });
+  const t = (x: Omit<Task, "createdAt" | "updatedAt">): Task => ({ published: true, ...x, createdAt: created, updatedAt: created });
 
   return [
     // Student

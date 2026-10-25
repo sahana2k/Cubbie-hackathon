@@ -40,6 +40,7 @@ export const TaskInputSchema = z.object({
   course: z.string().max(120).nullable().optional(),
   dueAt: nullableIso,
   dueLabel: z.string().max(60).nullable().optional(),
+  published: z.boolean().optional(),
   progress: z.number().min(0).max(100).optional(),
   points: z.number().min(0).nullable().optional(),
   priority: z.enum(["low", "medium", "high"]).optional(),

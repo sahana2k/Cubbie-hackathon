@@ -7,13 +7,12 @@ export const VIEWS: Record<View, ViewDef> = {
   student: {
     id: "student",
     label: "Student",
-    short: "Classes",
+    short: "Coursework",
     doneStatuses: ["done"],
     columns: [
-      { id: "todo", label: "To do", wash: "butter", hint: "Not started" },
+      { id: "todo", label: "Todo", wash: "butter", hint: "Published · due within 15 days" },
       { id: "in_progress", label: "In progress", wash: "sky", hint: "Working on it" },
-      { id: "partial", label: "Partly done", wash: "lilac", hint: "Drafted, needs finishing" },
-      { id: "done", label: "Submitted", wash: "mint", hint: "Turned in" }
+      { id: "done", label: "Submit", wash: "mint", hint: "Turned in" }
     ]
   },
   grader: {

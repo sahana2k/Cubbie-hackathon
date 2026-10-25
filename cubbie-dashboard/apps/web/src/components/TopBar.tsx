@@ -1,3 +1,4 @@
+import { Icon } from "./Icon";
 import type { IntegrationStatus, View } from "@cubbie/shared/types";
 import { VIEWS, VIEW_ORDER } from "@cubbie/shared/views";
 
@@ -7,10 +8,13 @@ interface Props {
   status: IntegrationStatus | null;
   theme: "light" | "dark"; onTheme: () => void;
   pane: "chat" | "board"; onPane: (p: "chat" | "board") => void;
+  graderAvailable: boolean;
+  settingsOpen: boolean; onSettings: () => void;
+  discordOpen: boolean; onDiscord: () => void;
   onReset?: () => void;
 }
 
-export function TopBar({ view, onView, query, onQuery, status, theme, onTheme, pane, onPane, onReset }: Props) {
+export function TopBar({ view, onView, query, onQuery, status, theme, onTheme, pane, onPane, onReset, graderAvailable, settingsOpen, onSettings, discordOpen, onDiscord }: Props) {
   return (
     <header className="topbar">
       <div className="brand">
@@ -20,15 +24,15 @@ export function TopBar({ view, onView, query, onQuery, status, theme, onTheme, p
 
       <nav className="view-switch" aria-label="Dashboard view">
         {VIEW_ORDER.map(v => (
-          <button key={v} className={v === view ? "on" : ""} aria-pressed={v === view} onClick={() => onView(v)}>
-            <span className="long">{VIEWS[v].label}</span><span className="short">{VIEWS[v].short}</span>
+          <button key={v} disabled={v === "grader" && !graderAvailable} title={v === "grader" && !graderAvailable ? "No TA/Grader role is available in Canvas settings" : undefined} className={v === view ? "on" : ""} aria-pressed={v === view} onClick={() => onView(v)}>
+            <Icon name={v} /><span className="long">{VIEWS[v].label}</span><span className="short">{VIEWS[v].short}</span>
           </button>
         ))}
       </nav>
 
       <div className="pane-switch" role="tablist" aria-label="Pane">
-        <button role="tab" aria-selected={pane === "chat"} className={pane === "chat" ? "on" : ""} onClick={() => onPane("chat")}>Cubbie</button>
-        <button role="tab" aria-selected={pane === "board"} className={pane === "board" ? "on" : ""} onClick={() => onPane("board")}>Board</button>
+        <button role="tab" aria-selected={pane === "chat"} className={pane === "chat" ? "on" : ""} onClick={() => onPane("chat")}><Icon name="chat" />Cubbie</button>
+        <button role="tab" aria-selected={pane === "board"} className={pane === "board" ? "on" : ""} onClick={() => onPane("board")}><Icon name="board" />Board</button>
       </div>
 
       <label className="search">
@@ -46,7 +50,9 @@ export function TopBar({ view, onView, query, onQuery, status, theme, onTheme, p
         </span>
         {status?.transport === "local"
           ? <span className={`pill ${status.canvas?.connected ? "ok" : "warn"}`}><i />Canvas {status.canvas?.connected ? "connected" : "not connected"}</span>
-          : <span className={`pill ${status?.discord === "linked" ? "ok" : "warn"}`}><i />Discord {status?.discord === "linked" ? "linked" : "not linked"}</span>}
+          : null}
+        <button className={`nav-toggle ${discordOpen ? "on" : ""}`} aria-pressed={discordOpen} onClick={onDiscord} title="Toggle Discord panel"><Icon name="discord" />Discord <span>{discordOpen ? "On" : "Off"}</span></button>
+        <button className={`icon-btn ${settingsOpen ? "on" : ""}`} onClick={onSettings} aria-label="Settings" aria-pressed={settingsOpen} title="Settings"><Icon name="settings" /></button>
         <button className="icon-btn" onClick={onTheme} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}>
           {theme === "dark"
             ? <svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="4" fill="currentColor" /><g stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">{[0, 45, 90, 135, 180, 225, 270, 315].map(a => <line key={a} x1="10" y1="1.8" x2="10" y2="3.6" transform={`rotate(${a} 10 10)`} />)}</g></svg>

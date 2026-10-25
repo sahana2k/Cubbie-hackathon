@@ -1,0 +1,12 @@
+{
+  "name": "@cubbie/imessage-relay",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "macOS agent that syncs ONLY the Cubbie iMessage thread to the Cubbie Dashboard and sends replies typed on the board.",
+  "bin": { "cubbie-relay": "dist/index.js" },
+  "scripts": { "build": "tsc -p tsconfig.json", "typecheck": "tsc --noEmit", "start": "node dist/index.js", "setup": "node dist/index.js setup" },
+  "dependencies": { "better-sqlite3": "11.5.0", "ws": "8.18.0" },
+  "devDependencies": { "@types/better-sqlite3": "7.6.11", "@types/node": "20.17.6", "@types/ws": "8.5.12", "typescript": "5.6.3" },
+  "os": ["darwin"]
+}

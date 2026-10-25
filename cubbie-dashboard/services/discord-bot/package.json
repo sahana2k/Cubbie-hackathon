@@ -1,0 +1,19 @@
+{
+  "name": "@cubbie/discord-bot",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit",
+    "start": "node dist/index.js",
+    "register": "node --import tsx src/register.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "3.682.0",
+    "@aws-sdk/client-secrets-manager": "3.682.0",
+    "@aws-sdk/lib-dynamodb": "3.682.0",
+    "discord.js": "14.16.3"
+  },
+  "devDependencies": { "@types/node": "20.17.6", "tsx": "4.19.2", "typescript": "5.6.3" }
+}

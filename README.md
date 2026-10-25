@@ -6,7 +6,6 @@ Built for the **Cubbie Hackathon**, Cubbie Dashboard brings a student's scattere
 
 The goal is simple: **spend less time managing college work and more time doing it.**
 
-[Quick start](#quick-start) · [Live integrations](#connect-real-accounts) · [Tesseract agents](#how-tesseract-works) · [Demo walkthrough](#hackathon-demo-walkthrough) · [Architecture](#architecture)
 
 ## The problem
 
@@ -120,7 +119,6 @@ The token stays in the local server's memory and must be re-entered after restar
 
 The reader selects the configured one-to-one conversation. Sending from the live dashboard sends a real message; connecting does not send one automatically. A send confirmation is not a delivery or read receipt.
 
-See the [local connection guide](cubbie-dashboard/docs/LOCAL-LIVE.md) for permissions, storage behavior, and troubleshooting.
 
 ### Discord and Tesseract
 
@@ -135,7 +133,6 @@ Connecting verifies the LLM configuration with a small tool-call request. PDF an
 
 The dashboard displays the channel feed and project state. Send messages, claim work, vote, and approve proposals **in Discord as yourself**. Tesseract supports server channels, not personal group DMs.
 
-See [Tesseract setup and verification](cubbie-dashboard/docs/tesseract.md) for the full configuration.
 
 ## How Tesseract works
 
@@ -193,8 +190,6 @@ flowchart TD
 | Tests | Node test runner, Vitest, Python unittest |
 
 ### Cubbie skill integration
-
-The [cubbie-dashboard-sync skill](cubbie-dashboard/skills/cubbie-dashboard-sync/SKILL.md) packages facts already verified by Cubbie's existing workflows and posts them to `POST /ingest/cubbie` using a personal `x-cubbie-key`.
 
 The cloud ingest handler validates batches and uses stable source IDs to update existing cards rather than creating duplicates. The skill does not independently provide Canvas, Gmail, or Cubbridge access; those upstream connections and workflows must already be available in Cubbie.
 
@@ -268,7 +263,6 @@ corepack pnpm exec cdk bootstrap
 corepack pnpm exec cdk deploy
 ```
 
-Deployment creates AWS resources and may incur charges. Cloud iMessage access requires the separate [macOS relay](cubbie-dashboard/agents/imessage-relay/README.md). Optional Bedrock summaries require a model enabled in the deployment region.
 
 Workflow files currently live under `cubbie-dashboard/.github/workflows/`. To activate GitHub Actions for this repository layout, move them to the repository-root `.github/workflows/` and update working directories and relevant paths.
 

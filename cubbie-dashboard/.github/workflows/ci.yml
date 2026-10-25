@@ -11,11 +11,9 @@ jobs:
       - uses: pnpm/action-setup@v4
         with: { version: 9.12.3 }
       - uses: actions/setup-node@v4
-        with: { node-version: 20, cache: pnpm }
+        with: { node-version: 24, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
-      - run: pnpm --filter @cubbie/api test
+      - run: pnpm --filter @cubbie/web test
+      - run: pnpm --filter @cubbie/tesseract test
       - run: pnpm --filter @cubbie/web build
-      - run: python3 skills/cubbie-dashboard-sync/scripts/push.py --url https://example.com --input skills/cubbie-dashboard-sync/sample-batch.json --dry-run
-        env: { CUBBIE_DASHBOARD_API_KEY: ci }
-      - run: pnpm --filter @cubbie/infra exec cdk synth --quiet

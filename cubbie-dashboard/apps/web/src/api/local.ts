@@ -39,10 +39,11 @@ export function createLocalApi(base: string): Api {
     void poll();
     return result;
   }
-  const unavailable = async (): Promise<never> => { throw new Error("This action needs the deployed AWS connection. It is not enabled on this local dashboard."); };
+  const unavailable = async (): Promise<never> => { throw new Error("This action is not part of the local dashboard."); };
   return {
     mode: "live",
     local: {
+      syncMessages: selected => change("/local/imessage/sync", { selected }),
       connections: () => call("/local/connections"),
       connectCanvas: (url, token) => change("/local/canvas/connect", { url, token }),
       syncCanvas: (courses, includeOtherCourses = false) => change("/local/canvas/sync", { courses, includeOtherCourses }),
@@ -58,9 +59,7 @@ export function createLocalApi(base: string): Api {
     sendMessage: text => change("/chat/messages", { text }),
     listDiscord: async () => [], sendDiscord: unavailable,
     status: () => call("/integrations/status"),
-    createRelayToken: unavailable, createSyncKey: unavailable, createDiscordLinkCode: unavailable, setDiscordChannels: unavailable,
     weeklySummary: () => change("/summary"),
-    endpoints: () => ({ apiUrl: location.origin + base, wsUrl: "" }),
     subscribe(fn) {
       listeners.add(fn);
       if (!timer) { void poll(); timer = setInterval(() => void poll(), 3000); }

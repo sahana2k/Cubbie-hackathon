@@ -13,6 +13,7 @@ export interface LocalConnections {
   currentTermLabel?: string; includeOtherCourses?: boolean;
 }
 export interface LocalApi {
+  syncMessages(selected?: string): Promise<LocalConnections & { candidates?: string[] }>;
   connections(): Promise<LocalConnections>;
   connectCanvas(url: string, token: string): Promise<LocalConnections>;
   syncCanvas(courses: Pick<LocalCourse, "id" | "view">[], includeOtherCourses?: boolean): Promise<{ imported: number; coverageNotes: string[] }>;
@@ -21,7 +22,7 @@ export interface LocalApi {
   disconnectMessages(): Promise<void>;
 }
 
-/** Everything the UI needs. The demo adapter and the live AWS adapter both implement it. */
+/** Local dashboard API. Credentials are handled by the server on this Mac. */
 export interface Api {
   local?: LocalApi;
   mode: "demo" | "live";
@@ -35,12 +36,6 @@ export interface Api {
   sendDiscord(text: string, channelId: string): Promise<DiscordMessage>;
   status(): Promise<IntegrationStatus>;
   subscribe(fn: (e: RealtimeEvent) => void): () => void;
-  /** Settings: secrets are returned once and never shown again. */
-  createRelayToken(name: string): Promise<{ token: string }>;
-  createSyncKey(): Promise<{ key: string; envName: string }>;
-  createDiscordLinkCode(): Promise<{ code: string; expiresInSeconds: number }>;
-  setDiscordChannels(channelIds: string[]): Promise<{ channelIds: string[] }>;
   weeklySummary(): Promise<{ text: string }>;
-  endpoints(): { apiUrl: string; wsUrl: string };
   reset?(): Promise<void>;
 }

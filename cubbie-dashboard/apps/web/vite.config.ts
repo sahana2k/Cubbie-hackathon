@@ -4,7 +4,7 @@ import { viteSingleFile } from "vite-plugin-singlefile";
 import { fileURLToPath } from "node:url";
 
 // "preview" mode builds one self-contained index.html (demo data, no backend) for sharing as a link.
-// Normal builds produce the hashed asset bundle that CDK uploads to S3 behind CloudFront.
+// Normal builds are served by the local Python dashboard.
 export default defineConfig(({ mode }) => ({
   plugins: [react(), ...(mode === "preview" ? [viteSingleFile()] : [])],
   resolve: {

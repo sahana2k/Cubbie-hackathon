@@ -131,9 +131,24 @@ class MessageTests(unittest.TestCase):
 
 
 class StorageTests(unittest.TestCase):
+    def test_restart_removes_canvas_snapshot_and_requires_fresh_verification(self):
+        with tempfile.TemporaryDirectory() as folder:
+            state = State(Path(folder))
+            state.config.update(canvasAccount='Cached account', canvasUserId=1, courses=[{'id': 1}], handle='+15551112222')
+            state.save_config()
+            state.put_tasks([{'id': 'cached', 'source': 'canvas', 'createdAt': 'now'}])
+            fresh = State(Path(folder))
+            self.assertEqual(fresh.tasks(all_courses=True), [])
+            self.assertIsNone(fresh.connections()['canvasAccount'])
+            self.assertEqual(fresh.connections()['courses'], [])
+            self.assertEqual(fresh.connections()['handle'], '')
+            self.assertIsNone(fresh.messages)
+            self.assertNotIn('Cached account', (Path(folder) / 'connections.json').read_text())
+
     def test_user_board_status_edit_is_kept_on_next_canvas_import(self):
         with tempfile.TemporaryDirectory() as folder:
             state = State(Path(folder))
+            state.canvas = object()  # This fixture represents a verified Canvas session.
             task = {'id': 'canvas_task', 'source': 'canvas', 'view': 'grader', 'status': 'todo', 'createdAt': 'now'}
             state.put_tasks([task])
             state.put_tasks([{**task, 'status': 'in_progress'}])
@@ -145,6 +160,7 @@ class StorageTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             state = State(Path(folder))
             self.assertFalse(state.status()['canvas']['graderAvailable'])
+            state.canvas = object()
             student = {'id': 1, 'name': 'Student', 'roles': ['student'], 'view': 'student',
                        'termStart': '2000-01-01T00:00:00Z', 'termEnd': '2100-01-01T00:00:00Z'}
             staff = {**student, 'id': 2, 'roles': ['ta'], 'view': 'grader'}

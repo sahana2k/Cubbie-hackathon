@@ -52,12 +52,19 @@ class State:
             self.config = json.loads((folder / 'connections.json').read_text())
         except (OSError, ValueError):
             self.config = {}
-        self.messages = Messages(self.config['handle']) if self.config.get('handle') else None
+        # Reconnect explicitly each session; never show old Canvas identity or snapshots.
+        for key in ('canvasAccount', 'canvasUserId', 'courses', 'lastCanvasSync', 'coverageNotes', 'includeOtherCourses'):
+            self.config.pop(key, None)
+        self.messages = None
         path = folder / 'board.sqlite3'
         with database(path) as db:
             db.execute('CREATE TABLE IF NOT EXISTS tasks (id TEXT PRIMARY KEY, data TEXT NOT NULL)')
+            for row in db.execute('SELECT id,data FROM tasks').fetchall():
+                if json.loads(row[1]).get('source') == 'canvas':
+                    db.execute('DELETE FROM tasks WHERE id=?', (row[0],))
         os.chmod(path, 0o600)
         self.path = path
+        self.save_config()
 
     def save_config(self):
         with self.lock:
@@ -70,6 +77,8 @@ class State:
     def tasks(self, all_courses=False):
         with database(self.path) as db:
             tasks = [json.loads(row[0]) for row in db.execute('SELECT data FROM tasks ORDER BY id')]
+        if not all_courses and self.canvas is None:
+            return [task for task in tasks if task.get('source') != 'canvas']
         courses = self.config.get('courses', [])
         if all_courses or not courses:
             return tasks
@@ -119,11 +128,11 @@ class State:
 
     def connections(self):
         return {'canvasConnected': self.canvas is not None, 'canvasUrl': self.config.get('canvasUrl', 'https://canvas.asu.edu'),
-                'canvasAccount': self.config.get('canvasAccount'),
-                'courses': course_defaults(self.config.get('courses', []), self.config.get('includeOtherCourses', False)),
+                'canvasAccount': self.config.get('canvasAccount') if self.canvas else None,
+                'courses': course_defaults(self.config.get('courses', []), self.config.get('includeOtherCourses', False)) if self.canvas else [],
                 'currentTermLabel': '%s %s' % current_term(),
                 'includeOtherCourses': self.config.get('includeOtherCourses', False),
-                'handle': self.config.get('handle', ''), 'lastSync': self.config.get('lastCanvasSync'),
+                'handle': self.messages.handle if self.messages else '', 'lastSync': self.config.get('lastCanvasSync'),
                 'coverageNotes': self.config.get('coverageNotes', []), 'canvasError': self.canvas_error,
                 'imessageError': self.messages_error}
 
@@ -304,6 +313,21 @@ class Handler(BaseHTTPRequestHandler):
                 self.state.config['handle'] = reader.handle
                 self.state.save_config()
                 return self.reply(200, self.state.connections())
+            if path == '/api/local/imessage/sync' and self.command == 'POST':
+                candidates = Messages.discover(self.state.config.get('handle'))
+                chosen = data.get('selected')
+                if chosen and chosen not in candidates:
+                    raise ConnectionError('Choose a Cubbie conversation found on this Mac.')
+                if not candidates:
+                    raise ConnectionError('No named Cubbie conversation was found. Save Cubbie as a contact named “Cubbie”, allow Contacts access if prompted, then sync again.')
+                if len(candidates) > 1 and not chosen:
+                    return self.reply(200, {**self.state.connections(), 'candidates': candidates})
+                handle = chosen or candidates[0]
+                self.state.messages = Messages(handle)
+                self.state.messages_error = None
+                self.state.config['handle'] = handle
+                self.state.save_config()
+                return self.reply(200, {**self.state.connections(), 'candidates': []})
             if path == '/api/local/imessage/disconnect' and self.command == 'POST':
                 self.state.messages = None
                 self.state.messages_error = None

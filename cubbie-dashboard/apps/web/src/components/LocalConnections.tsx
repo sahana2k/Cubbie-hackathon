@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import canvasLogo from "../assets/canvas-logo.jpeg";
 import type { IntegrationStatus } from "@cubbie/shared/types";
 import type { LocalApi, LocalConnections as Connections, LocalCourse } from "../api/types";
 
@@ -9,6 +10,7 @@ export function LocalConnections({ local, status, onError }: {
   const [url, setUrl] = useState("https://canvas.asu.edu");
   const [token, setToken] = useState("");
   const [handle, setHandle] = useState("");
+  const [candidates, setCandidates] = useState<string[]>([]);
   const [courses, setCourses] = useState<LocalCourse[]>([]);
   const [showOther, setShowOther] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
@@ -23,21 +25,26 @@ export function LocalConnections({ local, status, onError }: {
     setBusy(action); setNotice("");
     try { await fn(); } catch (error) { onError((error as Error).message); } finally { setBusy(null); }
   };
-  return <div className="settings">
-    <section className="set-card">
-      <header><h3>Canvas</h3><span className={`pill ${connection?.canvasConnected ? "ok" : "warn"}`}>
-        <i />{connection?.canvasConnected ? "Connected" : "Not connected"}</span></header>
-      <p>Import real assignments into Coursework and Grading. Your token stays in this server’s memory and must be entered again after a restart.</p>
+  return <div className="settings connected-accounts">
+    <details className="set-card canvas-account">
+      <summary className="canvas-account-summary"><div className="account-title"><img className="account-logo" src={canvasLogo} alt="" /><h3>Canvas</h3></div><span className="account-caret" aria-hidden="true">⌄</span></summary>
+      {connection?.canvasAccount && <div className="canvas-account-identity"><span aria-hidden="true">✓</span>{connection.canvasAccount}</div>}
+      <div className="canvas-expanded">
+      <p>Import real assignments into Coursework and Grading. Your access token stays on this Mac.</p>
       {connection?.canvasAccount && <p className="fine">Canvas account: {connection.canvasAccount}</p>}
       <form onSubmit={event => { event.preventDefault(); void run("canvas", async () => {
         try {
           const result = await local.connectCanvas(url, token);
           setConnection(result); setCourses(result.courses); setShowOther(result.includeOtherCourses ?? false);
-          setNotice(`Canvas connected. Current courses for ${result.currentTermLabel ?? "this term"} are selected, including your TA/grader courses.`);
+          const selected = result.courses.filter(course => course.view !== 'skip' && course.activity === 'current').map(({ id, view }) => ({ id, view }));
+          if (selected.length) {
+            const imported = await local.syncCanvas(selected, false); await load();
+            setNotice(`Canvas verified. Imported ${imported.imported} assignments from your current courses.${imported.coverageNotes.length ? ' Some courses could not be read.' : ''}`);
+          } else setNotice('Canvas verified. No current courses were selected; review the available courses below.');
         } finally { setToken(""); }
       }); }}>
-        <label className="field"><span>Canvas address</span><input type="url" value={url} required onChange={event => setUrl(event.target.value)} /></label>
-        <label className="field"><span>Personal Canvas test token</span><input type="password" value={token} required autoComplete="off" onChange={event => setToken(event.target.value)} /></label>
+        <details className="canvas-origin"><summary>Canvas address</summary><label className="field"><span>Canvas address</span><input type="url" value={url} required onChange={event => setUrl(event.target.value)} /></label></details>
+        <label className="field"><span>Enter Access Token</span><input type="password" placeholder="Enter Access Token" value={token} required autoComplete="off" onChange={event => setToken(event.target.value)} /></label>
         <p className="fine">Create a short-lived personal test token in Canvas → Account → Settings → Approved Integrations, if your school permits it. Never send it in a chat.</p>
         <button className="primary" disabled={busy !== null || !token.trim()}>{busy === "canvas" ? "Connecting…" : "Connect Canvas"}</button>
       </form>
@@ -73,23 +80,16 @@ export function LocalConnections({ local, status, onError }: {
       {connection?.lastSync && <p className="fine">Last imported: {new Date(connection.lastSync).toLocaleString()}</p>}
       {(status?.canvas?.coverageNotes ?? connection?.coverageNotes)?.map(note => <p className="fine" key={note}>{note}</p>)}
       {status?.canvas?.error && <p className="error">{status.canvas.error}</p>}
-    </section>
-    <section className="set-card">
-      <header><h3>Your Cubbie iMessage conversation</h3><span className={`pill ${status?.imessageRelay === "online" ? "ok" : "warn"}`}>
-        <i />{status?.imessageRelay === "online" ? "Connected on this Mac" : "Not connected"}</span></header>
-      <p>Read your existing one-to-one Cubbie thread from Messages on this Mac. Other chats and group conversations are excluded. Text and supported image cards refresh automatically.</p>
-      <form onSubmit={event => { event.preventDefault(); void run("messages", async () => {
-        setConnection(await local.connectMessages(handle)); setNotice("Cubbie conversation connected. The left pane will refresh shortly.");
-      }); }}>
-        <label className="field"><span>Cubbie’s exact iMessage phone number or email</span>
-          <input value={handle} required autoComplete="off" placeholder="Cubbie’s number, including country code" onChange={event => setHandle(event.target.value)} /></label>
-        <p className="fine">Use the number/email shown in the Cubbie conversation’s info panel, not your own number. Messages must already be signed in and synced on this Mac.</p>
-        <div className="row"><button className="primary" disabled={busy !== null || !handle.trim()}>{busy === "messages" ? "Connecting…" : "Connect Cubbie thread"}</button>
-          <button type="button" className="ghost" disabled={busy !== null || !connection?.handle} onClick={() => void run("disconnect", async () => {
-            await local.disconnectMessages(); await load(); setNotice("Cubbie thread disconnected.");
-          })}>Disconnect thread</button></div>
-      </form>
-      <p className="fine">If macOS blocks reading: System Settings → Privacy &amp; Security → Full Disk Access → enable your terminal, then restart this server. Sending a message from the composer may also require Automation → Messages permission. Connecting alone sends nothing.</p>
+      </div>
+    </details>
+    <section className="reach-cubbie" aria-labelledby="reach-cubbie-title">
+      <div className="message-sync-row"><span id="reach-cubbie-title">iMessage</span>{handle && <small>{handle}</small>}
+        <button className="phone-sync" aria-label="Sync Cubbie number" disabled={busy !== null} onClick={() => void run('messages', async () => {
+          const value = await local.syncMessages(); setConnection(value); setHandle(value.handle); setCandidates(value.candidates || []);
+          setNotice(value.candidates?.length ? 'Choose your Cubbie conversation below.' : 'Cubbie conversation synced.');
+        })}>{busy === 'messages' ? 'Syncing…' : '↻ Sync'}</button>
+      </div>
+      {candidates.map(candidate => <button className="ghost" key={candidate} onClick={() => void run('messages', async () => { const value = await local.syncMessages(candidate); setConnection(value); setHandle(value.handle); setCandidates([]); setNotice('Cubbie conversation linked.'); })}>{candidate}</button>)}
       {status?.imessageError && <p className="error" role="alert">{status.imessageError}</p>}
     </section>
     {notice && <p className="local-notice" role="status">{notice}</p>}

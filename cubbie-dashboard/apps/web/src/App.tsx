@@ -23,13 +23,12 @@ function initialView(): View {
   return h === "grader" || h === "jobs" || h === "student" ? h : "student";
 }
 function initialTheme(): "light" | "dark" {
-  try { const t = localStorage.getItem("cubbie.theme"); if (t === "light" || t === "dark") return t; } catch { /* ignore */ }
-  return matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  return "light";
 }
 
 export default function App() {
   const [view, setView] = useState<View>(initialView);
-  const [tab, setTab] = useState<Tab>("board");
+  const [tab, setTab] = useState<Tab>(() => new URLSearchParams(location.search).has("dashboard") ? "board" : "settings");
   const [tasks, setTasks] = useState<Task[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [, setDiscord] = useState<DiscordMessage[]>([]);
@@ -119,8 +118,8 @@ export default function App() {
         <section className="work" aria-label="Dashboard">
           <div className="work-head">
             <div>
-              <h1>{tab === "settings" ? "Settings" : tab === "discord" ? "Group project" : view === "student" ? "Coursework" : view === "grader" ? "Grading" : "Job hunt"}</h1>
-              <p className="summary">{tab === "discord" ? "Your group project, in four dimensions." : tab === "settings" ? "Connect iMessage, Cubbie and Discord." : summary(view, visible)}</p>
+              <h1>{tab === "settings" ? "Connected Accounts" : tab === "discord" ? "Group project" : view === "student" ? "Coursework" : view === "grader" ? "Grading" : "Job hunt"}</h1>
+              <p className="summary">{tab === "discord" ? "Your group project, in four dimensions." : tab === "settings" ? "Your courses. Your conversations. Connected." : summary(view, visible)}</p>
             </div>
             <div className="tabs" role="tablist" aria-label="Dashboard sections">
               {TABS.map(t => (
@@ -142,7 +141,7 @@ export default function App() {
             )}
             {tab === "week" && <WeekView tasks={visible} onOpen={setOpenId} />}
             {tab === "discord" && <TesseractWorkspace query={query} />}
-            {tab === "settings" && <Settings api={api} status={status} onError={setError} />}
+            {tab === "settings" && <Settings api={api} status={status} onError={setError} onJoin={() => { setTab("board"); const url = new URL(location.href); url.searchParams.delete("connections"); url.searchParams.set("dashboard", "1"); history.replaceState(null, "", url); }} />}
           </div>
         </section>
       </main>

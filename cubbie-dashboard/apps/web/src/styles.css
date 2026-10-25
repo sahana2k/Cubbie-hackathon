@@ -406,3 +406,87 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 
 
 .ts-connection-message { padding: 22px 16px; color: var(--ink-2); line-height: 1.6; flex: 1; }
+
+/* Connected accounts: quiet paper, white cards, one blue invitation. */
+.split:has(.account-layout) { grid-template-columns: 1fr; }
+.split:has(.account-layout) > .chat { display: none; }
+.work:has(.account-layout) { background: #f7f5f3; color: #171717; }
+.work:has(.account-layout) .work-head { justify-content: center; text-align: center; padding: 48px 20px 26px; }
+.work:has(.account-layout) .work-head h1 { font: italic 600 34px/1.25 Georgia, serif; }
+.work:has(.account-layout) .work-head .summary, .work:has(.account-layout) .tabs { display: none; }
+.account-layout { --ink: #171717; --ink-2: #6e6e73; --ink-3: #8e8e93; --line: #e9e6e3; --card: #fff; --accent: #087bff; --accent-ink: #fff; color-scheme: light; display: grid; grid-template-columns: minmax(0, 760px) 290px; gap: 54px; max-width: 1180px; margin: 0 auto; padding: 16px 24px 70px; align-items: start; }
+.settings.connected-accounts { display: flex; flex-direction: column; gap: 20px; width: 100%; min-width: 0; }
+.connected-accounts .set-card { border: 1px solid #ece9e7; background: #fff; border-radius: 28px; padding: 25px 28px; box-shadow: 0 14px 35px #30271c06; }
+.account-title { display: flex; align-items: center; gap: 17px; }
+.account-title h3 { margin: 0; font: 650 22px/1.3 var(--ui); }
+.account-title p { margin: 4px 0 0; color: #949497; font-size: 14px; }
+.account-logo { display: grid; place-items: center; flex: 0 0 54px; width: 54px; height: 54px; border-radius: 16px; font: 600 44px/1 var(--ui); }
+.canvas-mark { color: #ed3038; border: 7px dotted #ed3038; font-size: 23px; border-radius: 50%; }
+.phone-mark { background: linear-gradient(145deg, #45d765, #1bb248); color: white; font-size: 34px; }
+.connected-accounts .field input, .connected-accounts .field select { background: #faf9f8; border: 1px solid #e3e1df; color: #191919; border-radius: 13px; padding: 14px 16px; }
+.connected-accounts .primary { border: 0; border-radius: 12px; background: #087bff; color: white; padding: 12px 20px; }
+.connected-accounts .ghost { color: #696970; }
+.connected-accounts .pill { background: #f8f8f7; color: #727278; border-color: #e9e9e7; }
+.account-detail { display: flex; justify-content: space-between; align-items: center; gap: 15px; padding: 22px 0 12px; border-top: 1px solid #f0eeec; margin-top: 22px; font-size: 17px; overflow-wrap: anywhere; }
+.canvas-origin { color: #8b8b90; font-size: 13px; margin: 14px 0; }
+.canvas-origin summary { cursor: pointer; }
+.account-discord { padding-top: 65px; }
+.tesseract-invite { border-radius: 28px; background: linear-gradient(155deg, #087bff, #0767f3); color: #fff; padding: 30px 25px; max-width: 420px; box-shadow: 0 15px 35px #087bff20; }
+.tesseract-invite h2 { margin: 13px 0; font: 650 27px/1.25 var(--ui); color: white; }
+.tesseract-invite p { color: #ffffffdb; font-size: 17px; line-height: 1.5; margin: 12px 0 24px; }
+.tesseract-orbit { font-size: 30px; }
+.tesseract-invite button { width: 100%; border: 1px solid #e4e6ed; background: white; color: #25252a; padding: 14px 20px; border-radius: 18px; font-weight: 650; display: flex; justify-content: space-between; }
+.setup-dialog { color: var(--ink); background: var(--card); border: 1px solid var(--line); border-radius: 24px; box-shadow: 0 32px 100px #0005; width: min(880px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); padding: 22px; overflow-y: auto; }
+.setup-dialog::backdrop { background: #17192366; backdrop-filter: blur(9px); }
+.setup-dialog-tools { display: flex; justify-content: space-between; gap: 12px; padding-bottom: 20px; }
+.setup-dialog-tools > div { display: flex; gap: 14px; align-items: center; }
+.setup-dialog-tools button { border: 0; background: transparent; padding: 8px; color: var(--ink-2); }
+.setup-dialog-tools .danger { color: #d54444; }
+.setup-dialog .ts-connect { margin: 0; border: none; box-shadow: none; }
+@media (max-width: 1000px) { .account-layout { grid-template-columns: minmax(0, 1fr); max-width: 800px; gap: 24px; } .account-discord { padding-top: 0; } .tesseract-invite { max-width: none; } }
+@media (max-width: 560px) { .account-layout { padding: 8px 8px 40px; } .connected-accounts .set-card { padding: 22px 17px; border-radius: 22px; } .account-title { gap: 10px; } .account-title h3 { font-size: 19px; } .account-logo { width: 42px; height: 42px; flex-basis: 42px; } .account-title p { font-size: 12px; } .setup-dialog { padding: 12px; } }
+
+/* Compact, centered connection cards with the invitation tucked into the corner. */
+.brand { align-items: center; gap: 8px; }
+.cubboard-logo { width: 34px; height: 34px; object-fit: contain; border-radius: 9px; }
+.wordmark::after { display: none; }
+.account-layout { display: block; max-width: 800px; padding: 32px 22px 180px; }
+.account-discord { position: fixed; bottom: 28px; right: 28px; width: 260px; padding: 0; z-index: 20; }
+.account-discord .tesseract-invite { padding: 24px; border-radius: 26px; }
+.account-discord .tesseract-invite h2 { font-size: 25px; margin: 0 0 12px; }
+.account-discord .tesseract-invite p { font-size: 16px; margin: 0 0 23px; }
+.discord-join-label { display: inline-flex; align-items: center; gap: 9px; }
+.discord-join-icon { width: 23px; height: 23px; color: #5865f2; flex-shrink: 0; }
+.connected-accounts .canvas-account { padding: 0; overflow: hidden; }
+.canvas-account-summary { list-style: none; display: flex; align-items: center; justify-content: space-between; padding: 25px 28px; cursor: pointer; gap: 20px; }
+.canvas-account-summary::-webkit-details-marker { display: none; }
+.canvas-account-summary:focus-visible { outline: 3px solid #087bff; outline-offset: -4px; border-radius: 28px; }
+.canvas-account-summary .account-logo { object-fit: contain; border-radius: 0; }
+.account-caret { color: #939399; font-size: 27px; line-height: 1; transition: transform .18s; }
+.canvas-account[open] > summary .account-caret { transform: rotate(180deg); }
+.canvas-expanded { padding: 0 28px 28px; border-top: 1px solid #f1efed; }
+.canvas-account-identity { padding: 18px 28px; background: #fcfbfa; color: #89898e; }
+.canvas-account-identity > span { color: #24b25a; margin-right: 12px; }
+.reach-cubbie { margin-top: 34px; padding-top: 34px; border-top: 1px solid #e4e0dd; text-align: center; }
+.reach-cubbie h2 { margin: 14px 0 35px; font: italic 600 30px/1.3 Georgia, serif; }
+.reach-actions { display: grid; grid-template-columns: 1fr 1fr; align-items: stretch; gap: 16px; }
+.open-message { border: 1px solid #b4a6f6; border-radius: 32px; color: #fff; background: linear-gradient(160deg, #a89cf7 0%, #167cff 55%, #00b4f2 100%); display: flex; align-items: center; justify-content: center; gap: 14px; padding: 16px 21px; font-size: 18px; font-weight: 650; text-decoration: none; min-height: 65px; box-shadow: 0 8px 20px #0084ff15; }
+.open-message img { width: 27px; height: 27px; object-fit: contain; border-radius: 7px; }
+.open-message > span { margin-left: auto; font-size: 27px; }
+.open-message:disabled { opacity: .65; cursor: default; }
+.phone-number-pill { border: 1px solid #9faaf1; border-top-color: #e4a9d7; border-radius: 32px; padding: 13px 17px; display: flex; align-items: center; justify-content: center; gap: 9px; color: #5e5e65; min-width: 0; font-size: 16px; }
+.phone-number-pill > span { overflow-wrap: anywhere; }
+.phone-number-pill button { border: 0; background: transparent; padding: 4px; color: #64646c; white-space: nowrap; }
+.phone-number-pill .phone-sync { color: #087bff; font-size: 13px; }
+.message-help { margin-top: 25px; font-size: 12px; color: #929297; text-align: left; }
+.message-help summary { cursor: pointer; text-align: center; }
+@media (max-width: 1200px) { .account-discord { position: static; width: min(320px, 100%); margin: 55px 0 0 auto; } .account-layout { padding-bottom: 50px; } }
+@media (max-width: 560px) { .account-layout { padding: 16px 8px 40px; } .reach-actions { grid-template-columns: 1fr; } .canvas-account-summary { padding: 20px; } .canvas-expanded { padding: 0 20px 20px; } .account-discord { width: 100%; } .reach-cubbie h2 { font-size: 27px; } }
+
+.message-sync-row { display: flex; align-items: center; justify-content: center; gap: 14px; color: #6d6d75; font-size: 14px; }
+.message-sync-row small { overflow-wrap: anywhere; }
+.message-sync-row .phone-sync { padding: 7px 13px; font-size: 13px; color: #087bff; border: 1px solid #d8dce5; border-radius: 10px; background: white; }
+.join-dashboard-row { text-align: center; margin: 42px auto 0; }
+.join-dashboard { border: 0; border-radius: 18px; background: #087bff; color: #fff; padding: 15px 29px; min-width: 220px; font-size: 17px; font-weight: 650; }
+.join-dashboard > span { margin-left: 22px; }
+.join-dashboard-row p { color: #909097; font-size: 13px; }

@@ -1,4 +1,5 @@
 import { Icon } from "./Icon";
+import cubbieLogo from "../assets/cubbie-icon.png";
 import type { IntegrationStatus, View } from "@cubbie/shared/types";
 import { VIEWS, VIEW_ORDER } from "@cubbie/shared/views";
 
@@ -18,8 +19,8 @@ export function TopBar({ view, onView, query, onQuery, status, theme, onTheme, p
   return (
     <header className="topbar">
       <div className="brand">
-        <span className="wordmark">cubbie</span>
-        <span className="brand-sub">board</span>
+        <img className="cubboard-logo" src={cubbieLogo} alt="" />
+        <span className="wordmark">cubboard</span>
       </div>
 
       <nav className="view-switch" aria-label="Dashboard view">

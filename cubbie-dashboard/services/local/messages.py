@@ -47,6 +47,57 @@ def body_text(blob):
 
 
 class Messages:
+    @staticmethod
+    def discover(saved=None, path=None):
+        """Find a named Cubbie contact/thread using metadata, never unrelated message text."""
+        reader = Messages(saved or 'detect@cubbie.ai', path)
+        with reader.connect() as db:
+            rows = db.execute('''SELECT DISTINCT c.chat_identifier FROM chat c
+                WHERE c.style=45 AND EXISTS (SELECT 1 FROM chat_message_join j
+                  JOIN message m ON m.ROWID=j.message_id
+                  WHERE j.chat_id=c.ROWID AND m.is_from_me=0)
+                AND (lower(COALESCE(c.display_name,'')) IN ('cubbie','cubbie ai')
+                     OR lower(c.chat_identifier) LIKE '%@cubbie.ai')''').fetchall()
+            candidates = {row[0] for row in rows}
+            if saved:
+                marks = ','.join('?' for _ in reader.handles)
+                found = db.execute(f'''SELECT c.chat_identifier FROM chat c WHERE c.style=45
+                    AND c.chat_identifier IN ({marks}) AND EXISTS (SELECT 1 FROM chat_message_join j
+                    JOIN message m ON m.ROWID=j.message_id WHERE j.chat_id=c.ROWID AND m.is_from_me=0)''', reader.handles).fetchall()
+                candidates.update(row[0] for row in found)
+        if candidates:
+            return sorted(candidates)
+        # Contacts resolves a one-to-one thread's display name, which chat.db often omits.
+        script = '''tell application "Contacts"
+          set foundValues to ""
+          repeat with p in (every person whose name contains "Cubbie")
+            repeat with n in phones of p
+              set foundValues to foundValues & (value of n) & linefeed
+            end repeat
+            repeat with e in emails of p
+              set foundValues to foundValues & (value of e) & linefeed
+            end repeat
+          end repeat
+          return foundValues
+        end tell'''
+        try:
+            result = subprocess.run(['osascript', '-e', script], capture_output=True, text=True, timeout=20)
+            contacts = result.stdout.splitlines() if result.returncode == 0 else []
+        except (OSError, subprocess.TimeoutExpired):
+            contacts = []
+        with reader.connect() as db:
+            for value in contacts:
+                try:
+                    variants = handles(value)
+                except ConnectionError:
+                    continue
+                marks = ','.join('?' for _ in variants)
+                rows = db.execute(f'''SELECT c.chat_identifier FROM chat c WHERE c.style=45
+                    AND c.chat_identifier IN ({marks}) AND EXISTS (SELECT 1 FROM chat_message_join j
+                    JOIN message m ON m.ROWID=j.message_id WHERE j.chat_id=c.ROWID AND m.is_from_me=0)''', variants).fetchall()
+                candidates.update(row[0] for row in rows)
+        return sorted(candidates)
+
     def __init__(self, handle, path=None):
         self.handle = handle.strip()
         self.handles = handles(handle)

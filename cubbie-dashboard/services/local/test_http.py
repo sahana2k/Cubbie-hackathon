@@ -58,6 +58,21 @@ class LocalHttpTests(unittest.TestCase):
                 self.assertEqual(self.request('GET', '/api/tasks', headers=headers)[0], 403)
         self.assertEqual(self.request('POST', '/api/tasks', {}, {'Origin': ''})[0], 403)
 
+    def test_message_sync_auto_links_a_unique_match_and_rejects_guesses(self):
+        with patch('server.Messages.discover', return_value=['+15551112222']):
+            code, result = self.request('POST', '/api/local/imessage/sync', {})
+            self.assertEqual(code, 200)
+            self.assertEqual(result['handle'], '+15551112222')
+            self.assertEqual(self.request('POST', '/api/local/imessage/sync', {'selected': '+15559999999'})[0], 400)
+            self.assertEqual(self.request('POST', '/api/local/imessage/sync', {}, {'Origin': 'https://evil.example'})[0], 403)
+
+    def test_message_sync_requires_a_choice_when_matches_are_ambiguous(self):
+        with patch('server.Messages.discover', return_value=['+15551112222', '+15552223333']):
+            code, result = self.request('POST', '/api/local/imessage/sync', {})
+            self.assertEqual(code, 200)
+            self.assertEqual(len(result['candidates']), 2)
+            self.assertIsNone(self.http.state.messages)
+
     def test_tesseract_routes_require_session_and_restrict_proxy_paths(self):
         self.assertEqual(self.request('POST', '/api/tesseract/connect', {}, {'Cookie': ''})[0], 403)
         self.assertEqual(self.request('POST', '/api/tesseract/connect', {}, {'Origin': 'https://evil.example'})[0], 403)
@@ -124,6 +139,21 @@ class LocalHttpTests(unittest.TestCase):
         self.assertEqual(task['source'], 'canvas')
         self.assertIsNone(task['grading']['gradingDueAt'])
         self.assertIsNone(task['grading']['studentsSubmitted'])
+
+    def test_invalid_canvas_token_cannot_reveal_cached_courses_or_import(self):
+        self.http.state.config.update(canvasAccount='Old account', courses=[{'id': 1, 'name': 'Old course'}])
+        self.http.state.put_tasks([{'id': 'old', 'source': 'canvas', 'view': 'student', 'createdAt': 'now'}])
+        code, saved = self.request('GET', '/api/local/connections')
+        self.assertIsNone(saved['canvasAccount'])
+        self.assertEqual(saved['courses'], [])
+        self.assertEqual(self.request('GET', '/api/tasks')[1]['items'], [])
+        from canvas import ConnectionError
+        with patch('server.Canvas') as canvas:
+            canvas.return_value.get.side_effect = ConnectionError('Canvas rejected the token (401).')
+            self.assertEqual(self.request('POST', '/api/local/canvas/connect', {'url': 'https://canvas.asu.edu', 'token': 'invalid'})[0], 400)
+            canvas.return_value.courses.assert_not_called()
+        self.assertIsNone(self.http.state.canvas)
+        self.assertEqual(self.request('POST', '/api/local/canvas/sync', {'courses': [{'id': 1, 'view': 'student'}]})[0], 400)
 
     def test_connecting_messages_never_sends_a_message(self):
         class Reader:

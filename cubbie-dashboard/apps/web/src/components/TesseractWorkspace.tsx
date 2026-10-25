@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { activeProjectTasks } from '../lib/projectTasks';
 import { createPortal } from 'react-dom';
 import { config } from '../config';
+import { SetupDialog } from './SetupDialog';
+import { TesseractInvite } from './TesseractInvite';
 import { DiscordText } from './DiscordText';
 import type { Names } from '../lib/discordMarkdown';
 
@@ -23,7 +25,6 @@ type Feed = { messages: FeedMessage[]; names: Names };
 // Discord shows consecutive messages from one author within a few minutes as a single group.
 const continues = (prev: FeedMessage | undefined, m: FeedMessage) => !!prev && prev.author === m.author && m.at - prev.at < 7 * 60_000;
 async function request<T>(path: string, data?: unknown): Promise<T> {
-  if (!config().localApi) throw new Error('Run the local dashboard (corepack pnpm live) to connect Tesseract.');
   const response = await fetch(`${config().apiUrl || '/api'}/tesseract${path}`, {
     method: data === undefined ? 'GET' : 'POST', credentials: 'same-origin', cache: 'no-store',
     headers: { 'Content-Type': 'application/json' }, body: data === undefined ? undefined : JSON.stringify(data)
@@ -35,7 +36,7 @@ async function request<T>(path: string, data?: unknown): Promise<T> {
 const date = (value: number) => new Date(value).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 const labels: Record<string, string> = { proposed: 'Awaiting approval', confirmed: 'To do', in_progress: 'In progress', blocked: 'Blocked', done: 'Done', overdue: 'Overdue', declined: 'Declined' };
 
-export function TesseractWorkspace({ query }: { query: string }) {
+export function TesseractWorkspace({ query, setupOnly = false }: { query: string; setupOnly?: boolean }) {
   const refreshRef = useRef<(() => Promise<void>) | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [syncedAt, setSyncedAt] = useState<number | null>(null);
@@ -51,6 +52,7 @@ export function TesseractWorkspace({ query }: { query: string }) {
   const feedRef = useRef<HTMLDivElement>(null);
   const stickRef = useRef(true);
   const [settings, setSettings] = useState(false);
+  const [setupOpen, setSetupOpen] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -66,7 +68,7 @@ export function TesseractWorkspace({ query }: { query: string }) {
     setGuildInput(value.guildId || ''); setProvider(value.provider || 'anthropic');
     setModel(value.model || ''); setBaseUrl(value.baseUrl || ''); setApiKey(''); setBotToken('');
   };
-  const openSettings = () => { applySettings(savedSettings); setSettings(true); };
+  const openSettings = () => { applySettings(savedSettings); setSettings(true); setSetupOpen(true); };
   const selectChannel = (id: string) => {
     setChannel(id);
     try { localStorage.setItem(`tesseract.channel.${guild}`, id); } catch { /* storage optional */ }
@@ -85,10 +87,10 @@ export function TesseractWorkspace({ query }: { query: string }) {
       if (!active) return;
       setServers(result.servers);
       setGuild(result.servers.find(s => s.id === saved.guildId)?.id || result.servers[0]?.id || '');
-      setSettings(false);
+      setSettings(false); setError('');
     }).catch(e => { if (active) { setError(e.message); setSettings(true); } }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, []);
+  }, [revision]);
   useEffect(() => {
     setChannels([]); setChannel(''); setSnapshot(null);
     if (!guild) return;
@@ -147,14 +149,14 @@ export function TesseractWorkspace({ query }: { query: string }) {
       const saved: ConnectionSettings = { guildId: guildInput, provider, model, baseUrl, connected: true, hasCredentials: true };
       setSavedSettings(saved); setHasCredentials(true);
       setServers(result.servers);
-      setGuild(result.servers[0]?.id || ''); setRevision(r => r + 1); setSettings(false);
+      setGuild(result.servers[0]?.id || ''); setRevision(r => r + 1); setSettings(false); setSetupOpen(false);
     } catch (e) { setError((e as Error).message); }
     finally { setBusy(false); setApiKey(''); setBotToken(''); }
   }
   async function disconnect() {
     setBusy(true);
-    try { await request('/disconnect', {}); setServers([]); setGuild(''); setSnapshot(null); setHasCredentials(false); setSettings(true); }
-    catch (e) { setError((e as Error).message); }
+    try { await request('/disconnect', {}); setServers([]); setGuild(''); setSnapshot(null); setHasCredentials(false); setSettings(true); return true; }
+    catch (e) { setError((e as Error).message); return false; }
     finally { setBusy(false); }
   }
   const members = [...(snapshot?.members || [])];
@@ -163,7 +165,7 @@ export function TesseractWorkspace({ query }: { query: string }) {
   const filtered = activeProjectTasks(snapshot?.tasks || []).filter(t => `${t.title} ${t.description || ''} ${members.find(m => m.id === t.owner_id)?.name || ''}`.toLowerCase().includes(query.toLowerCase()));
 
   return <>
-    {portal && createPortal(<>
+    {portal && !setupOnly && createPortal(<>
       <header className="ts-chat-head"><div className="dc-av">T</div><div><strong>Tesseract</strong><small>{connected ? 'Your Discord project teammate' : 'Connect your project group'}</small></div><div className="ts-chat-actions"><button className="ghost" type="button" disabled={refreshing || !guild || !channel} onClick={() => void refreshRef.current?.()} aria-label="Refresh task board" title="Refresh task board">{refreshing ? 'Syncing…' : '↻ Refresh'}</button><button type="button" className="ghost" onClick={() => settings ? setSettings(false) : openSettings()} aria-label="Discord connection settings">⚙</button></div></header>
       {connected && <p className="ts-sync-status" role="status">{syncError ? `Sync failed: ${syncError}` : refreshing ? 'Syncing task board…' : syncedAt ? `Board synced at ${new Date(syncedAt).toLocaleTimeString()}` : 'Waiting to sync…'}</p>}
       {connected && <div className="ts-selectors"><label className="field">Server<select aria-label="Discord server" value={guild} onChange={e => setGuild(e.target.value)}>{servers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label><label className="field">Channel<select aria-label="Discord channel" value={channel} onChange={e => selectChannel(e.target.value)}>{channels.map(c => <option key={c.id} value={c.id}># {c.name}</option>)}</select></label></div>}
@@ -190,15 +192,14 @@ export function TesseractWorkspace({ query }: { query: string }) {
             </article>; })}
         </div>
         <div className="ts-chat-foot"><p className="fine">Read-only view. Reply, upload and approve in Discord.</p><a className="primary" href={discordUrl} target="_blank" rel="noreferrer">Message in Discord ↗</a></div>
-      </> : <div className="ts-connection-message">
-        <h3>Your project on Discord</h3>
-        <p>Connect your server to sync project tasks, then open Discord to chat with your team.</p>
-        <a className="primary" href={discordUrl} target="_blank" rel="noreferrer">Open in Discord ↗</a>
-      </div>}
+      </> : null}
     </>, portal)}
-    {error && <p className="error" role="alert">{error}</p>}
+    {error && !setupOpen && connected && <p className="error" role="alert">{error}</p>}
     {loading && <p>Loading Discord connection…</p>}
-    {!loading && settings && <form className="set-card ts-connect" onSubmit={e => { e.preventDefault(); void connect(); }}>
+    {(!loading || setupOnly) && (!connected || setupOnly) && <TesseractInvite onJoin={openSettings} />}
+    {setupOpen && <SetupDialog onClose={() => { setSetupOpen(false); if (connected) setSettings(false); }} onDelete={connected && config().localApi ? () => { if (window.confirm('Disconnect Tesseract? Your project data will be kept.')) void disconnect().then(ok => { if (ok) setSetupOpen(false); }); } : undefined}>
+    {error && <p className="error" role="alert">{error}</p>}
+    {!loading && settings && config().localApi && <form className="set-card ts-connect" onSubmit={e => { e.preventDefault(); void connect(); }}>
       <header><h3>{connected ? 'Discord connection' : 'Connect your project'}</h3>{connected && <button type="button" className="ghost" onClick={() => setSettings(false)}>Back to board</button>}</header>
       <p>Add your Discord bot and choose the model that runs Tesseract.</p>
       <ol className="steps"><li>Create a bot in the <a href="https://discord.com/developers/applications" target="_blank" rel="noreferrer">Discord Developer Portal</a>. Enable Message Content and Server Members intents.</li><li>Install it in your server with the bot and applications.commands scopes and View Channels, Read Message History, Send Messages, Embed Links and Attach Files permissions.</li><li>Create a #tesseract-log channel the bot can write to. Copy the server ID (Discord Developer Mode), then enter your credentials below.</li></ol>
@@ -210,7 +211,8 @@ export function TesseractWorkspace({ query }: { query: string }) {
       <div className="row"><button className="primary" disabled={busy || !config().localApi}>{busy ? 'Saving…' : connected ? 'Save changes' : 'Connect Discord + LLM'}</button>{connected && <button className="ghost" type="button" disabled={busy} onClick={() => void disconnect()}>Disconnect</button>}</div>
       {!config().localApi && <p className="fine">Start the local dashboard with <code>corepack pnpm live</code> to enable this connection.</p>}
     </form>}
-    {connected && <>
+    </SetupDialog>}
+    {connected && !setupOnly && <>
       <div className="ts-toolbar"><div><strong>{snapshot?.project?.name || 'Your project board'}</strong><span className="fine"> {snapshot?.project?.submitted_at ? '· Submission confirmed' : snapshot?.project?.final_deadline ? `· Due ${date(snapshot.project.final_deadline)}` : '· Tasks grouped by teammate'}</span></div><button className="ghost" onClick={openSettings}>Connection settings</button></div>
       {snapshot && !snapshot.project && <div className="local-notice">Run <strong>/setup</strong> in this Discord channel, then ask everyone to <strong>/join</strong>. Upload the assignment with <strong>/rubric</strong> to create your claim board.</div>}
       {!snapshot && <p role="status">Loading project tasks…</p>}

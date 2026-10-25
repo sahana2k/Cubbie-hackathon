@@ -1,0 +1,17 @@
+{
+  "skill": "cubbridge",
+  "checkedAt": "2026-10-24T12:00:00-07:00",
+  "timeZone": "America/Phoenix",
+  "sourceLabel": "saved_ledger",
+  "coverageNotes": ["Fictional sample data"],
+  "tasks": [
+    {"view": "jobs", "status": "assessment", "kind": "assessment", "title": "Online assessment", "source": "gmail",
+     "sourceId": "gmail:demo-1", "dueAt": "2026-10-26T10:00:00-07:00",
+     "job": {"company": "ExampleCo", "role": "Software Intern", "stage": "assessment",
+             "assessmentDeadline": "2026-10-26T10:00:00-07:00", "assessmentDeadlineText": "within 72 hours of this email",
+             "nextAction": "Complete the assessment", "calendarState": "pending_approval"}},
+    {"view": "jobs", "status": "applied", "kind": "application", "title": "Application received", "source": "gmail",
+     "sourceId": "gmail:demo-3", "dueAt": null, "dueLabel": "No follow-up set",
+     "job": {"company": "Fictional Systems", "role": "Analyst", "stage": "applied", "confirmationAt": "2026-10-10T09:00:00-07:00"}}
+  ]
+}

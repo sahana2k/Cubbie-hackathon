@@ -1,0 +1,17 @@
+{
+  "app": "npx tsx bin/app.ts",
+  "context": {
+    "stage": "prod",
+    "allowedOrigins": ["http://localhost:5173"],
+    "alarmEmail": "",
+    "monthlyBudgetUsd": 50,
+    "bedrockModelId": "",
+    "discordBotEnabled": false,
+    "googleClientId": "",
+    "googleClientSecretArn": "",
+    "customDomain": "",
+    "certificateArn": "",
+    "briefCron": "cron(30 7 * * ? *)",
+    "briefTimeZone": "America/Phoenix"
+  }
+}

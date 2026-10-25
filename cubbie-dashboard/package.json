@@ -1,0 +1,20 @@
+{
+  "name": "cubbie-dashboard",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Cubbie Dashboard: a Jira-style board for coursework, grading and job applications, with the Cubbie iMessage thread and Discord side by side. Runs on AWS.",
+  "packageManager": "pnpm@9.12.3",
+  "scripts": {
+    "live": "python3 services/local/server.py",
+    "test:local": "python3 -m unittest discover -s services/local -p 'test_*.py'",
+    "dev": "pnpm --filter @cubbie/web dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm --filter @cubbie/api test",
+    "deploy": "pnpm --filter @cubbie/infra deploy",
+    "build:preview": "pnpm --filter @cubbie/web build:preview"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

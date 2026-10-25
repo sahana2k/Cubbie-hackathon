@@ -1,0 +1,11 @@
+node_modules
+dist
+cdk.out
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+__pycache__/
+*.pyc
+*.sqlite3

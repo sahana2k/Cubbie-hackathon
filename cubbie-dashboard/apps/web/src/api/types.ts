@@ -20,6 +20,7 @@ export interface LocalApi {
   disconnectCanvas(): Promise<void>;
   connectMessages(handle: string): Promise<LocalConnections>;
   disconnectMessages(): Promise<void>;
+  syncJobs(): Promise<{ imported: number; active: number; skipped: number; workbook: string }>;
 }
 
 /** Local dashboard API. Credentials are handled by the server on this Mac. */

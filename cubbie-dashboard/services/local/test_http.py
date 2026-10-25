@@ -164,6 +164,42 @@ class LocalHttpTests(unittest.TestCase):
             self.assertEqual(self.request('POST', '/api/local/imessage/connect', {'handle': '+15551234567'})[0], 200)
         self.assertEqual(self.request('GET', '/api/chat/messages')[1]['items'][0]['text'], 'Fixture message')
 
+    def test_job_sync_reports_missing_connection_and_workbook(self):
+        code, result = self.request('POST', '/api/local/jobs/sync', {})
+        self.assertEqual(code, 400)
+        self.assertIn('Connect your Cubbie', result['message'])
+        from unittest.mock import Mock
+        self.http.state.messages = Mock()
+        self.http.state.messages.latest_jobs_workbook.return_value = None
+        code, result = self.request('POST', '/api/local/jobs/sync', {})
+        self.assertEqual(code, 400)
+        self.assertIn('No jobs workbook', result['message'])
+
+    def test_job_sync_updates_stages_and_reimports_without_duplicates_or_sending(self):
+        from test_jobs import workbook, HEAD
+        from unittest.mock import Mock
+        path = Path(self.folder.name) / 'cubboard-jobs.xlsx'
+        reader = Mock()
+        reader.latest_jobs_workbook.return_value = {'id': 1, 'name': path.name, 'path': path}
+        self.http.state.messages = reader
+        workbook(path, [HEAD, ['Acme', 'Engineer', 'Applied', ''],
+                       ['Northwind', 'Analyst', 'Online assessment', ''],
+                       ['Harbor', 'Intern', 'Interview stage', ''],
+                       ['Closed Co', 'Intern', 'Rejected', '']])
+        for _ in range(2):
+            code, result = self.request('POST', '/api/local/jobs/sync', {})
+            self.assertEqual((code, result['active'], result['skipped']), (200, 3, 1))
+            self.assertEqual(len(self.http.state.tasks()), 3)
+        workbook(path, [HEAD, ['Acme', 'Engineer', 'Interview stage', '']])
+        self.assertEqual(self.request('POST', '/api/local/jobs/sync', {})[0], 200)
+        (card,) = self.http.state.tasks()
+        self.assertEqual((card['status'], card['job']['stage']), ('interview', 'interview'))
+        path.write_bytes(b'broken workbook')
+        self.assertEqual(self.request('POST', '/api/local/jobs/sync', {})[0], 400)
+        self.assertEqual(self.http.state.tasks(), [card])
+        reader.send.assert_not_called()
+        self.assertEqual(self.request('POST', '/api/local/jobs/sync', {}, {'Cookie': ''})[0], 403)
+
 
 if __name__ == '__main__':
     unittest.main()

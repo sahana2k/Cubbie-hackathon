@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ChatMessage, IntegrationStatus } from "@cubbie/shared/types";
 import cubbieIcon from "../assets/cubbie-icon.png";
 import { chatStamp } from "../lib/dates";
@@ -11,13 +11,24 @@ interface Props {
   onDraft: (s: string) => void;
   onSend: (text: string) => void;
   focusKey: number;
+  onSyncJobs?: () => Promise<string>;
 }
 
 const SUGGESTIONS = ["what's due this week", "what needs grading", "my applications", "add lab report due friday"];
 
-export function ChatPane({ messages, typing, status, draft, onDraft, onSend, focusKey }: Props) {
+export function ChatPane({ messages, typing, status, draft, onDraft, onSend, focusKey, onSyncJobs }: Props) {
   const scroller = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncNotice, setSyncNotice] = useState("");
+  const [syncError, setSyncError] = useState("");
+  const sync = async () => {
+    if (!onSyncJobs || syncing) return;
+    setSyncing(true); setSyncNotice(""); setSyncError("");
+    try { setSyncNotice(await onSyncJobs()); }
+    catch (error) { setSyncError((error as Error).message); }
+    finally { setSyncing(false); }
+  };
 
   useEffect(() => { scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: "smooth" }); }, [messages.length, typing]);
   useEffect(() => { if (focusKey) input.current?.focus(); }, [focusKey]);
@@ -27,6 +38,7 @@ export function ChatPane({ messages, typing, status, draft, onDraft, onSend, foc
 
   return (
     <section className="chat" aria-label="iMessage conversation with Cubbie">
+      <div>
       <header className="chat-head">
         <img className="avatar" src={cubbieIcon} alt="" width="38" height="38" />
         <div className="who">
@@ -34,6 +46,15 @@ export function ChatPane({ messages, typing, status, draft, onDraft, onSend, foc
           <span>{status?.imessageRelay === "online" ? `iMessage, synced through ${status.relayDevice ?? "your Mac"}` : status?.transport === "local" ? "Connect your Cubbie conversation in Settings." : "iMessage relay offline. Messages will send when your Mac reconnects."}</span>
         </div>
       </header>
+      {onSyncJobs && <div className="chat-job-sync">
+        <button className="ghost" disabled={syncing} onClick={() => void sync()} aria-busy={syncing}>
+          {syncing ? "Syncing jobs…" : "Sync jobs"}
+        </button>
+        <p className="fine">Read Cubbie’s latest applications workbook into Applied, Assessment and Interview.</p>
+        {syncNotice && <p className="fine" role="status">{syncNotice}</p>}
+        {syncError && <p className="error" role="alert">{syncError}</p>}
+      </div>}
+      </div>
 
       <div className="chat-scroll" ref={scroller}>
         {messages.map((m, i) => {

@@ -47,11 +47,24 @@ test("Todo includes today and day 15, excludes past, day 16, undated and invalid
 test("shared selection preserves in-progress, partial and submitted work with identical list IDs", () => {
   const selected = dashboardTasks([task("todo"), task("far", { dueAt: "2026-12-01T00:00:00-07:00" }),
     task("partial", { status: "partial", dueAt: null }), task("submitted", { status: "done" }),
-    task("grading", { view: "grader", dueAt: null }), task("job", { view: "jobs" })], now);
+    task("grading", { view: "grader", dueAt: null }), task("job", { view: "jobs", status: "applied" })], now);
   assert.deepEqual(selected.map(t => t.id), ["todo", "partial", "submitted", "grading", "job"]);
   assert.equal(selected.find(t => t.id === "partial").status, "in_progress");
   assert.deepEqual(datedItems(selected.filter(t => t.view === "student")).map(i => i.task.id).sort(),
     ["partial", "submitted", "todo"]);
+});
+
+test("Job hunt keeps active stages and hides offer and closed cards across dashboard views", () => {
+  const jobs = ["applied", "assessment", "interview", "offer", "closed"].map(status =>
+    task(status, { view: "jobs", status, kind: "application" }));
+  const selected = dashboardTasks(jobs, now);
+  assert.deepEqual(selected.map(t => t.id), ["applied", "assessment", "interview"]);
+  const { Board } = load(resolve(root, "src/components/Board"));
+  const board = renderToStaticMarkup(React.createElement(Board, {
+    tasks: selected, view: "jobs", onOpen() {}, onMove() {}, onCreate() {}
+  }));
+  assert.ok(!board.includes('aria-label="Offer"'));
+  assert.ok(!board.includes('aria-label="Closed"'));
 });
 
 test("List hides overdue work and Calendar shows only the next seven calendar days", () => {

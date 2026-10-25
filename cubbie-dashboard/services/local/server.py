@@ -9,6 +9,8 @@ import re
 from pathlib import Path
 import secrets
 import sqlite3
+import subprocess
+import sys
 import threading
 from datetime import datetime, timezone
 from http.cookies import SimpleCookie
@@ -17,6 +19,7 @@ from urllib.parse import unquote, urlsplit
 import uuid
 
 from canvas import Canvas, ConnectionError, assignment_task, course_activity, course_defaults, current_term
+from jobs import jobs_from_workbook
 from messages import Messages
 from tesseract import Tesseract
 
@@ -48,6 +51,7 @@ class State:
         self.canvas = None
         self.canvas_error = None
         self.messages_error = None
+        self.jobs_error = None
         try:
             self.config = json.loads((folder / 'connections.json').read_text())
         except (OSError, ValueError):
@@ -110,10 +114,67 @@ class State:
         try:
             rows = self.messages.rows()
             self.messages_error = None
+            try:
+                self.import_jobs()
+            except Exception:  # a job-list problem must never break the chat pane
+                self.jobs_error = 'The job list from Cubbie could not be imported. Ask Cubbie to send the workbook again.'
             return rows
         except ConnectionError as error:
             self.messages_error = str(error)
             return []
+
+    def import_jobs(self, force=False):
+        """Import Cubbie's newest cubboard-jobs*.xlsx from the thread, once per new attachment.
+
+        Cards from the workbook replace earlier Cubbie-imported job cards (so rejected jobs drop off);
+        jobs you added yourself on the board are never touched. Your notes on a card are kept.
+        """
+        finder = getattr(self.messages, 'latest_jobs_workbook', None)
+        if not finder:
+            if force:
+                raise ConnectionError('Connect your Cubbie conversation in Settings before syncing jobs.')
+            return
+        try:
+            found = finder()
+        except ConnectionError:
+            if force:
+                raise
+            return  # message_rows already reports Messages access problems
+        if not found:
+            if force:
+                raise ConnectionError('No jobs workbook is available in your Cubbie conversation. Ask Cubbie for a cubboard-jobs-…xlsx applications workbook and download it in Messages, then sync again.')
+            return
+        with self.lock:
+            if not force and self.config.get('jobsWorkbookId') == found['id']:
+                return
+            self.config['jobsWorkbookId'] = found['id']  # never retry the same file on every refresh
+            try:
+                tasks, skipped = jobs_from_workbook(found['path'], now())
+                if not tasks and not skipped:
+                    raise ConnectionError('The jobs workbook from Cubbie has no job rows. Existing job cards were kept.')
+            except ConnectionError as error:
+                self.jobs_error = str(error)
+                self.save_config()
+                if force:
+                    raise
+                return
+            keep = {task['id'] for task in tasks}
+            with database(self.path) as db:
+                for (task_id,) in db.execute('SELECT id FROM tasks').fetchall():
+                    if task_id.startswith('cubbridge_') and task_id not in keep:
+                        db.execute('DELETE FROM tasks WHERE id=?', (task_id,))
+                for task in tasks:
+                    existing = db.execute('SELECT data FROM tasks WHERE id=?', (task['id'],)).fetchone()
+                    if existing:
+                        old = json.loads(existing[0])
+                        task['createdAt'] = old['createdAt']
+                        task['notes'] = old.get('notes') or task.get('notes')
+                    db.execute('INSERT OR REPLACE INTO tasks VALUES (?,?)', (task['id'], json.dumps(task)))
+            self.config.update(lastJobsImport=now(), jobsImported=len(tasks), jobsSkipped=skipped, jobsWorkbook=found['name'])
+            self.save_config()
+            self.jobs_error = None
+            return {'imported': len(tasks), 'active': sum(task['status'] in ('applied', 'assessment', 'interview') for task in tasks),
+                    'skipped': skipped, 'workbook': found['name']}
 
     def status(self):
         return {'mode': 'live', 'transport': 'local',
@@ -124,7 +185,10 @@ class State:
                                                   for c in self.connections()['courses']
                                                   if self.config.get('includeOtherCourses', False) or c.get('activity') == 'current'), 'lastSync': self.config.get('lastCanvasSync'),
                            'error': self.canvas_error, 'coverageNotes': self.config.get('coverageNotes', [])},
-                'imessageError': self.messages_error}
+                'imessageError': self.messages_error,
+                'jobs': {'lastImport': self.config.get('lastJobsImport'), 'imported': self.config.get('jobsImported'),
+                         'skipped': self.config.get('jobsSkipped'), 'workbook': self.config.get('jobsWorkbook'),
+                         'error': self.jobs_error}}
 
     def connections(self):
         return {'canvasConnected': self.canvas is not None, 'canvasUrl': self.config.get('canvasUrl', 'https://canvas.asu.edu'),
@@ -300,6 +364,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.reply(200, self.state.connections())
             if path == '/api/local/canvas/sync' and self.command == 'POST':
                 return self.reply(200, self.state.sync_canvas(data.get('courses'), data.get('includeOtherCourses') is True))
+            if path == '/api/local/jobs/sync' and self.command == 'POST':
+                return self.reply(200, self.state.import_jobs(force=True))
             if path == '/api/local/canvas/disconnect' and self.command == 'POST':
                 self.state.canvas = None
                 self.state.canvas_error = None
@@ -376,6 +442,20 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
+    # Some macOS Homebrew installations load an incompatible system libexpat.
+    # Check before serving so workbook imports cannot fail midway through a request.
+    from xml.etree import ElementTree
+    try:
+        ElementTree.fromstring('<check/>')
+    except ImportError:
+        fallback = '/usr/bin/python3'
+        if sys.platform == 'darwin' and Path(sys.executable).resolve() != Path(fallback).resolve():
+            check = subprocess.run([fallback, '-c', 'from xml.etree import ElementTree; ElementTree.fromstring("<check/>")'],
+                                   capture_output=True)
+            if check.returncode == 0:
+                print('Using macOS system Python because the current XML parser is unavailable.', flush=True)
+                os.execv(fallback, [fallback, str(Path(__file__).resolve()), *sys.argv[1:]])
+        raise SystemExit('Python’s XML parser is unavailable. Install a working Python or use /usr/bin/python3 services/local/server.py.')
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--port', type=int, default=8787)
     parser.add_argument('--state-dir', type=Path, default=Path.home() / '.config/cubboard-dashboard')

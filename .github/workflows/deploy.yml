@@ -1,0 +1,57 @@
+name: Test and deploy
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:            # throwaway database for the test run only
+        image: postgres:16
+        env: { POSTGRES_USER: tesseract, POSTGRES_PASSWORD: pw, POSTGRES_DB: tesseract }
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    defaults:
+      run:
+        working-directory: cubbie-dashboard
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 9.12.3 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pnpm install --frozen-lockfile --filter @cubbie/web... --filter @cubbie/tesseract...
+      - name: Tesseract tests on SQLite
+        run: pnpm --filter @cubbie/tesseract test
+      - name: Tesseract tests on PostgreSQL
+        run: pnpm --filter @cubbie/tesseract exec vitest run --no-file-parallelism
+        env: { TEST_DATABASE_URL: 'postgresql://tesseract:pw@localhost:5432/tesseract' }
+      - run: pnpm --filter @cubbie/tesseract build && pnpm --filter @cubbie/web build
+      - name: Python backend tests
+        run: pip install -r services/local/requirements.txt && python -m unittest discover -s services/local -p 'test_*.py'
+  deploy:
+    # EC2 path only. Railway deploys by itself, so leave the DEPLOY_TARGET variable unset there.
+    needs: test
+    if: github.ref == 'refs/heads/main' && vars.DEPLOY_TARGET == 'ec2'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          command_timeout: 30m
+          script: |
+            cd ~/Cubbie-hackathon
+            git pull --ff-only
+            cd cubbie-dashboard
+            docker compose up -d --build
+            docker image prune -f

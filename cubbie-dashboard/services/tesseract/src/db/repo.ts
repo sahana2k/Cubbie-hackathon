@@ -148,7 +148,7 @@ export function updateTask(id: number, fields: Partial<Omit<Task, 'id' | 'projec
 // ─── Dependencies ────────────────────────────────────────
 export function addDependency(projectId: number, blockingId: number, dependentId: number, note?: string | null): Dependency {
   db().prepare(`INSERT INTO dependencies (project_id, blocking_task_id, dependent_task_id, note, created_at) VALUES (?, ?, ?, ?, ?)
-    ON CONFLICT(blocking_task_id, dependent_task_id) DO UPDATE SET state = 'active', note = COALESCE(excluded.note, note)`)
+    ON CONFLICT(blocking_task_id, dependent_task_id) DO UPDATE SET state = 'active', note = COALESCE(excluded.note, dependencies.note)`)
     .run(projectId, blockingId, dependentId, note ?? null, now());
   return db().prepare('SELECT * FROM dependencies WHERE blocking_task_id = ? AND dependent_task_id = ?').get(blockingId, dependentId) as Dependency;
 }
@@ -241,8 +241,8 @@ export function updateDecision(id: number, fields: Partial<Pick<Decision, 'appro
 // ─── Reminders ───────────────────────────────────────────
 /** Inserts unless a reminder with the same dedupe key already exists. Returns true if inserted. */
 export function scheduleReminder(r: { project_id: number; recipient_id?: string | null; task_id?: number | null; meeting_id?: number | null; kind: string; message: string; trigger_at: number; private?: boolean; dedupe_key?: string | null; }): boolean {
-  const info = db().prepare(`INSERT OR IGNORE INTO reminders (project_id, recipient_id, task_id, meeting_id, kind, message, trigger_at, private, dedupe_key)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(r.project_id, r.recipient_id ?? null, r.task_id ?? null, r.meeting_id ?? null, r.kind, r.message,
+  const info = db().prepare(`INSERT INTO reminders (project_id, recipient_id, task_id, meeting_id, kind, message, trigger_at, private, dedupe_key)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`).run(r.project_id, r.recipient_id ?? null, r.task_id ?? null, r.meeting_id ?? null, r.kind, r.message,
     r.trigger_at, r.private ? 1 : 0, r.dedupe_key ?? null);
   return info.changes > 0;
 }

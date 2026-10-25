@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Personal, loopback-only dashboard with direct Canvas and the selected Cubbie Messages thread."""
 import argparse
+import base64
+import hashlib
 from contextlib import contextmanager
 import json
 import mimetypes
@@ -21,6 +23,12 @@ from messages import Messages
 from tesseract import Tesseract
 
 ROOT = Path(__file__).resolve().parents[2]
+# Hostnames the dashboard may be served under when hosted, e.g. "cubbie-tesseract.duckdns.org".
+# Only set this when a reverse proxy in front (Caddy) enforces HTTPS and a login.
+PUBLIC_HOSTS = {h.strip().lower() for h in os.environ.get('PUBLIC_HOSTS', '').split(',') if h.strip()}
+# Optional team login for hosts without a proxy that adds one (Railway, Render). Browsers show a sign-in prompt.
+DASHBOARD_USER = os.environ.get('DASHBOARD_USER', 'team')
+DASHBOARD_PASSWORD = os.environ.get('DASHBOARD_PASSWORD', '')
 
 
 def now():
@@ -35,6 +43,73 @@ def database(path):
             yield connection
     finally:
         connection.close()
+
+
+DB_ERRORS = (sqlite3.Error,)
+try:
+    import psycopg
+    DB_ERRORS += (psycopg.Error,)
+except ImportError:  # only needed when DATABASE_URL points at PostgreSQL
+    psycopg = None
+
+
+class Board:
+    """Board task storage: a SQLite file by default, PostgreSQL when DATABASE_URL is set."""
+
+    def __init__(self, sqlite_path):
+        self.url = os.environ.get('DATABASE_URL', '')
+        self.postgres = self.url.startswith(('postgres://', 'postgresql://'))
+        self.path = sqlite_path
+        if self.postgres:
+            if psycopg is None:
+                raise RuntimeError('DATABASE_URL is PostgreSQL but psycopg is not installed: pip install "psycopg[binary]"')
+            # board_tasks, not tasks: Tesseract already owns a "tasks" table in the same database.
+            with self.connect() as db:
+                db.execute('CREATE TABLE IF NOT EXISTS board_tasks (id TEXT PRIMARY KEY, data TEXT NOT NULL)')
+        else:
+            with database(sqlite_path) as db:
+                db.execute('CREATE TABLE IF NOT EXISTS tasks (id TEXT PRIMARY KEY, data TEXT NOT NULL)')
+            os.chmod(sqlite_path, 0o600)
+
+    @contextmanager
+    def connect(self):
+        if not self.postgres:
+            with database(self.path) as db:
+                yield db
+            return
+        connection = psycopg.connect(self.url, connect_timeout=10)
+        try:
+            with connection:
+                yield connection
+        finally:
+            connection.close()
+
+    def sql(self, query):
+        """Write queries once in SQLite style; translate for PostgreSQL."""
+        if not self.postgres:
+            return query
+        return query.replace('FROM tasks', 'FROM board_tasks').replace('?', '%s')
+
+    def all(self):
+        with self.connect() as db:
+            return [json.loads(row[0]) for row in db.execute(self.sql('SELECT data FROM tasks ORDER BY id'))]
+
+    def get(self, task_id, db):
+        row = db.execute(self.sql('SELECT data FROM tasks WHERE id=?'), (task_id,)).fetchone()
+        return json.loads(row[0]) if row else None
+
+    def put(self, task, db):
+        if self.postgres:
+            db.execute('INSERT INTO board_tasks (id, data) VALUES (%s, %s) ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data',
+                       (task['id'], json.dumps(task)))
+        else:
+            db.execute('INSERT OR REPLACE INTO tasks VALUES (?,?)', (task['id'], json.dumps(task)))
+
+    def delete(self, task_id, db=None):
+        if db is None:
+            with self.connect() as db:
+                return self.delete(task_id, db)
+        db.execute(self.sql('DELETE FROM tasks WHERE id=?'), (task_id,))
 
 
 class State:
@@ -53,11 +128,8 @@ class State:
         except (OSError, ValueError):
             self.config = {}
         self.messages = Messages(self.config['handle']) if self.config.get('handle') else None
-        path = folder / 'board.sqlite3'
-        with database(path) as db:
-            db.execute('CREATE TABLE IF NOT EXISTS tasks (id TEXT PRIMARY KEY, data TEXT NOT NULL)')
-        os.chmod(path, 0o600)
-        self.path = path
+        self.path = folder / 'board.sqlite3'
+        self.board = Board(self.path)
 
     def save_config(self):
         with self.lock:
@@ -68,8 +140,7 @@ class State:
             os.replace(temporary, path)
 
     def tasks(self, all_courses=False):
-        with database(self.path) as db:
-            tasks = [json.loads(row[0]) for row in db.execute('SELECT data FROM tasks ORDER BY id')]
+        tasks = self.board.all()
         courses = self.config.get('courses', [])
         if all_courses or not courses:
             return tasks
@@ -84,16 +155,15 @@ class State:
         return [task for task in tasks if visible(task)]
 
     def put_tasks(self, tasks, preserve_board_status=False):
-        with self.lock, database(self.path) as db:
+        with self.lock, self.board.connect() as db:
             for task in tasks:
-                existing = db.execute('SELECT data FROM tasks WHERE id=?', (task['id'],)).fetchone()
-                if existing:
-                    old = json.loads(existing[0])
+                old = self.board.get(task['id'], db)
+                if old:
                     task['createdAt'] = old['createdAt']
                     if preserve_board_status and task['source'] == 'canvas' and task['status'] != 'done':
                         task['status'] = old.get('status', task['status'])
                     task['notes'] = old.get('notes') or task.get('notes')
-                db.execute('INSERT OR REPLACE INTO tasks VALUES (?,?)', (task['id'], json.dumps(task)))
+                self.board.put(task, db)
 
     def message_rows(self):
         if not self.messages:
@@ -166,6 +236,11 @@ class State:
             self.sync_lock.release()
 
 
+INGEST_ORDER = {'student': ['todo', 'in_progress', 'partial', 'done'],
+                'grader': ['todo', 'in_progress', 'partial', 'done'],
+                'jobs': ['applied', 'assessment', 'interview', 'offer', 'closed']}
+
+
 class Handler(BaseHTTPRequestHandler):
     @property
     def state(self):
@@ -184,15 +259,21 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Referrer-Policy', 'same-origin')
         self.send_header('X-Frame-Options', 'DENY')
         if cookie:
-            self.send_header('Set-Cookie', f'cubboard_session={self.state.session}; HttpOnly; SameSite=Strict; Path=/')
+            secure = '; Secure' if PUBLIC_HOSTS else ''
+            self.send_header('Set-Cookie', f'cubboard_session={self.state.session}; HttpOnly; SameSite=Strict; Path=/{secure}')
         self.end_headers()
         self.wfile.write(raw)
 
     def check_request(self, api=False):
         host = self.headers.get('Host', '')
+        forwarded = self.headers.get('X-Forwarded-Host', '').split(',')[0].strip().lower()
+        if forwarded in PUBLIC_HOSTS:  # platforms like Railway may pass the public name here
+            host = forwarded
         valid = {f'127.0.0.1:{self.server.server_port}', f'localhost:{self.server.server_port}'}
-        if host not in valid:
+        public = host.lower() in PUBLIC_HOSTS  # set when hosted behind HTTPS (Caddy, Railway, …)
+        if host not in valid and not public:
             raise PermissionError('This dashboard accepts only its local loopback address.')
+        expected_origin = ('https://' if public else 'http://') + host
         if api:
             cookies = SimpleCookie()
             cookies.load(self.headers.get('Cookie', ''))
@@ -200,19 +281,88 @@ class Handler(BaseHTTPRequestHandler):
             if not cookie or not secrets.compare_digest(cookie.value, self.state.session):
                 raise PermissionError('Open the dashboard in your browser before using its local API.')
             origin = self.headers.get('Origin')
-            if (origin and origin != 'http://' + host) or (self.command != 'GET' and origin != 'http://' + host):
+            if (origin and origin != expected_origin) or (self.command != 'GET' and origin != expected_origin):
                 raise PermissionError('This request did not originate from the local dashboard.')
 
-    def body(self):
+    def body(self, limit=64_000):
         size = int(self.headers.get('Content-Length', '0'))
-        if size < 0 or size > 64_000:
-            raise ValueError('Request exceeds the 64 KB limit.')
+        if size < 0 or size > limit:
+            raise ValueError(f'Request exceeds the {limit // 1000} KB limit.')
         if self.headers.get('Content-Type', '').split(';')[0] != 'application/json':
             raise ValueError('Use a JSON request.')
         data = json.loads(self.rfile.read(size) or b'{}')
         if not isinstance(data, dict):
             raise ValueError('Expected a JSON object.')
         return data
+
+    def logged_in(self):
+        header = self.headers.get('Authorization', '')
+        if not header.startswith('Basic '):
+            return False
+        try:
+            user, _, password = base64.b64decode(header[6:]).decode('utf-8').partition(':')
+        except (ValueError, UnicodeDecodeError):
+            return False
+        return secrets.compare_digest(user, DASHBOARD_USER) and secrets.compare_digest(password, DASHBOARD_PASSWORD)
+
+    def ask_login(self):
+        raw = b'{"message": "Sign in with the team username and password."}'
+        self.send_response(401)
+        self.send_header('WWW-Authenticate', 'Basic realm="Cubbie dashboard", charset="UTF-8"')
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Content-Length', str(len(raw)))
+        self.send_header('Cache-Control', 'no-store')
+        self.end_headers()
+        self.wfile.write(raw)
+
+    def ingest_cubbie(self):
+        """POST /api/ingest/cubbie from the cubbie-dashboard-sync Skill (Canvas, Gmail, Cubbridge data).
+
+        Same contract as the serverless handler: x-cubbie-key header, whole batch validated before any
+        write, cards keyed by sourceId so re-syncs update, and a sync never moves a card backwards.
+        """
+        expected = os.environ.get('CUBBIE_INGEST_KEY', '')
+        supplied = self.headers.get('x-cubbie-key', '')
+        if not expected or not supplied or not secrets.compare_digest(supplied, expected):
+            return self.reply(401, {'message': 'Missing or unknown x-cubbie-key.'})
+        try:
+            batch = self.body(limit=5_000_000)
+            items = batch.get('tasks')
+            if not isinstance(items, list) or len(items) > 2000:
+                raise ValueError('tasks must be a list of at most 2000 items')
+            for i, t in enumerate(items):
+                if not isinstance(t, dict) or t.get('view') not in INGEST_ORDER:
+                    raise ValueError(f'tasks[{i}].view must be student, grader or jobs')
+                if not isinstance(t.get('title'), str) or not t['title'].strip() or not isinstance(t.get('status'), str):
+                    raise ValueError(f'tasks[{i}] needs a title and status')
+                if not isinstance(t.get('sourceId'), str) or not t['sourceId'] or len(t['sourceId']) > 300:
+                    raise ValueError(f'tasks[{i}].sourceId is required')
+            existing = {t['id']: t for t in self.state.tasks(all_courses=True)}
+            stamp, merged = now(), []
+            for item in items:
+                task_id = 'src_' + hashlib.sha1(item['sourceId'].encode()).hexdigest()[:20]
+                prev = existing.get(task_id)
+                task = {'source': 'cubbie', **item, 'id': task_id, 'createdAt': prev['createdAt'] if prev else stamp, 'updatedAt': stamp}
+                if prev:
+                    order = INGEST_ORDER[task['view']]
+                    if task['view'] != 'jobs' and prev.get('status') in order and task['status'] in order \
+                            and order.index(prev['status']) > order.index(task['status']):
+                        task['status'] = prev['status']
+                    if 'progress' in prev or 'progress' in task:
+                        task['progress'] = max(prev.get('progress') or 0, task.get('progress') or 0)
+                    if prev.get('notes') or task.get('notes'):
+                        task['notes'] = prev.get('notes') or task.get('notes')
+                merged.append(task)
+            changed = [t for t in merged if t['id'] not in existing or
+                       {k: v for k, v in existing[t['id']].items() if k != 'updatedAt'} != {k: v for k, v in t.items() if k != 'updatedAt'}]
+            self.state.put_tasks(changed)
+            with self.state.lock:
+                self.state.config.update(lastCubbieSync=batch.get('checkedAt'), coverageNotes=batch.get('coverageNotes', []))
+                self.state.save_config()
+            return self.reply(200, {'received': len(merged), 'written': len(changed), 'unchanged': len(merged) - len(changed),
+                                    'coverageNotes': batch.get('coverageNotes', [])})
+        except (ValueError, KeyError, TypeError) as error:
+            return self.reply(400, {'message': str(error)})
 
     def do_GET(self):
         self.dispatch()
@@ -229,6 +379,10 @@ class Handler(BaseHTTPRequestHandler):
     def dispatch(self):
         path = urlsplit(self.path).path.rstrip('/') or '/'
         try:
+            if path == '/api/ingest/cubbie' and self.command == 'POST':
+                return self.ingest_cubbie()  # server-to-server: authenticated by key, not by browser session
+            if DASHBOARD_PASSWORD and not self.logged_in():
+                return self.ask_login()
             self.check_request(path.startswith('/api/'))
             if not path.startswith('/api/'):
                 if self.command != 'GET':
@@ -278,10 +432,9 @@ class Handler(BaseHTTPRequestHandler):
                 courses = client.courses()
                 # A different Canvas user must not see the previous user's imported records.
                 if self.state.config.get('canvasUserId') not in (None, identity['id']):
-                    with database(self.state.path) as db:
-                        for task in self.state.tasks(all_courses=True):
-                            if task.get('source') == 'canvas':
-                                db.execute('DELETE FROM tasks WHERE id=?', (task['id'],))
+                    for task in self.state.tasks(all_courses=True):
+                        if task.get('source') == 'canvas':
+                            self.state.board.delete(task['id'])
                     self.state.config.update(lastCanvasSync=None, coverageNotes=[])
                 self.state.canvas = client
                 self.state.canvas_error = None
@@ -330,8 +483,7 @@ class Handler(BaseHTTPRequestHandler):
                 if old is None:
                     return self.reply(404, {'message': 'Task not found'})
                 if self.command == 'DELETE':
-                    with database(self.state.path) as db:
-                        db.execute('DELETE FROM tasks WHERE id=?', (task_id,))
+                    self.state.board.delete(task_id)
                     return self.reply(200, {'ok': True})
                 allowed = {'status', 'title', 'notes', 'priority', 'progress', 'dueAt', 'dueLabel'}
                 task = {**old, **{k: v for k, v in data.items() if k in allowed}, 'updatedAt': now()}
@@ -347,17 +499,38 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(403, {'message': str(error)})
         except (ConnectionError, ValueError, KeyError, TypeError) as error:
             return self.reply(400, {'message': str(error)})
-        except (OSError, sqlite3.Error):
+        except (OSError,) + DB_ERRORS:
             return self.reply(500, {'message': 'The local operation failed. Check file permissions and the local server.'})
+
+
+def auto_connect_tesseract(state):
+    """Hosted mode: start the Discord bot from environment variables instead of the Settings form."""
+    if not os.environ.get('DISCORD_BOT_TOKEN'):
+        return
+    settings = {'botToken': os.environ['DISCORD_BOT_TOKEN'], 'guildId': os.environ.get('DISCORD_GUILD_ID', ''),
+                'provider': os.environ.get('LLM_PROVIDER', 'anthropic'), 'model': os.environ.get('LLM_MODEL', 'claude-sonnet-5-5'),
+                'apiKey': os.environ.get('LLM_API_KEY', ''), 'baseUrl': os.environ.get('LLM_BASE_URL', '')}
+    def run():
+        for attempt in range(5):
+            try:
+                state.tesseract.connect(settings)
+                print('Tesseract connected to Discord.', flush=True)
+                return
+            except Exception as error:  # report and retry; never print the credentials
+                print(f'Tesseract connect attempt {attempt + 1} failed: {error}', flush=True)
+                threading.Event().wait(15)
+    threading.Thread(target=run, daemon=True).start()
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--port', type=int, default=8787)
+    parser.add_argument('--port', type=int, default=int(os.environ.get('PORT', 8787)), help='Railway and Render set PORT')
+    parser.add_argument('--host', default='127.0.0.1', help='0.0.0.0 inside Docker; keep 127.0.0.1 on a laptop')
     parser.add_argument('--state-dir', type=Path, default=Path.home() / '.config/cubboard-dashboard')
     args = parser.parse_args()
-    server = ThreadingHTTPServer(('127.0.0.1', args.port), Handler)
+    server = ThreadingHTTPServer((args.host, args.port), Handler)
     server.state = State(args.state_dir)
+    auto_connect_tesseract(server.state)
     print(f'Private dashboard: http://127.0.0.1:{server.server_port}/#student', flush=True)
     print('Open Settings to connect Canvas and the Cubbie chat. No sample data is loaded.', flush=True)
     try:

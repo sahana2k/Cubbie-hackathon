@@ -1,0 +1,8 @@
+**/node_modules
+**/dist
+**/cdk.out
+.git
+.env
+.env.*
+*.sqlite3
+*.db

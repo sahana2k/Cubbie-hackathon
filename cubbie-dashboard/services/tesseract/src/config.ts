@@ -15,7 +15,7 @@ export const config = {
   model: process.env.LLM_MODEL || process.env.CLAUDE_MODEL || 'claude-sonnet-5-5',
   fastModel: process.env.LLM_MODEL || process.env.CLAUDE_FAST_MODEL || 'claude-haiku-5-5',
   defaultTimezone: process.env.DEFAULT_TIMEZONE || 'America/Phoenix',
-  databasePath: process.env.DATABASE_PATH || './data/mergemates.db',
+  databasePath: process.env.DATABASE_URL || process.env.DATABASE_PATH || './data/mergemates.db',
   schedulerIntervalMs: Number(process.env.SCHEDULER_INTERVAL_SECONDS || 60) * 1000,
   logLevel: (process.env.LOG_LEVEL || 'info') as 'debug' | 'info' | 'warn' | 'error',
 };

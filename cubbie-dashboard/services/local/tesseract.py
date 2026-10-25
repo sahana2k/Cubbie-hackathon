@@ -126,7 +126,8 @@ class Tesseract:
             env = {**os.environ, 'DISCORD_TOKEN': data['botToken'].strip(), 'DISCORD_CLIENT_ID': 'dashboard',
                    'DISCORD_GUILD_ID': data['guildId'], 'LLM_PROVIDER': data['provider'], 'LLM_MODEL': data['model'].strip(),
                    'LLM_API_KEY': data['apiKey'].strip(), 'LLM_BASE_URL': data.get('baseUrl', ''),
-                   'DATABASE_PATH': str(self.database_path(data['guildId'])),
+                   # Hosted: Tesseract reads DATABASE_URL (PostgreSQL) from os.environ; laptop: a SQLite file.
+                   **({} if os.environ.get('DATABASE_URL') else {'DATABASE_PATH': str(self.database_path(data['guildId']))}),
                    'TESSERACT_BRIDGE_TOKEN': self.token, 'LOG_LEVEL': 'error', 'PORT': '0'}
             self.process = subprocess.Popen(['node', str(entry)], cwd=entry.parent.parent, env=env,
                                             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)

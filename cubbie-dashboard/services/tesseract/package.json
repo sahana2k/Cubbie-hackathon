@@ -1,12 +1,12 @@
 {
   "name": "@cubbie/tesseract",
   "version": "1.0.0",
-  "description": "MergeMates \u2014 the AI project manager inside your Discord group chat, powered by Claude",
+  "description": "MergeMates — the AI project manager inside your Discord group chat, powered by Claude",
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
-    "build": "tsc -p .",
+    "build": "tsc -p . && cp src/db/pgWorker.cjs dist/db/",
     "typecheck": "tsc -p . --noEmit",
     "test": "vitest run",
     "register-commands": "tsx src/scripts/registerCommands.ts",
@@ -20,16 +20,19 @@
     "chrono-node": "^2.10.3",
     "discord.js": "^14.27.0",
     "dotenv": "^18.0.9",
-    "luxon": "^3.7.2"
+    "luxon": "^3.7.2",
+    "pg": "^8",
+    "synckit": "^0.12.3"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^9.6.0",
     "@types/luxon": "^3.7.6",
     "@types/node": "^26.6.5",
+    "@types/pg": "^8.23.1",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
-    "vitest": "^5.0.5",
-    "vite": "^8.0.0"
+    "vite": "^8.0.0",
+    "vitest": "^5.0.5"
   },
   "type": "commonjs",
   "engines": {

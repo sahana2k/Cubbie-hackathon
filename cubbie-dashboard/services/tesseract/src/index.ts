@@ -35,7 +35,7 @@ async function main() {
   const port = Number(process.env.PORT || 0);
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('Invalid PORT');
   initDb(config.databasePath);
-  log.info(`database ready at ${config.databasePath}`);
+  log.info(`database ready (${/^postgres/.test(config.databasePath) ? 'PostgreSQL' : config.databasePath})`);
 
   const client = new Client({
     intents: [

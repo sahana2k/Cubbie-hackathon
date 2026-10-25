@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+from unittest.mock import Mock, patch
 from pathlib import Path
 from tesseract import Tesseract
 
@@ -17,6 +18,55 @@ class TesseractTests(unittest.TestCase):
     def test_unconnected_bridge_does_not_proxy(self):
         with self.assertRaisesRegex(ValueError, 'Connect your Discord'):
             self.bridge.request('/snapshot')
+
+    def test_missing_entry_is_built_for_direct_python_start(self):
+        service = self.root / 'services/tesseract'
+        (service / 'node_modules').mkdir(parents=True)
+        entry = service / 'dist/index.js'
+        def build(command, **kwargs):
+            self.assertEqual(command[-3:], ['--filter', '@cubbie/tesseract', 'build'])
+            self.assertEqual(kwargs['cwd'], self.root)
+            entry.parent.mkdir()
+            entry.write_text('// compiled fixture')
+            return Mock(returncode=0)
+        with patch('tesseract.shutil.which', side_effect=lambda name: '/test/pnpm' if name == 'pnpm' else None), patch('tesseract.subprocess.run', side_effect=build) as run:
+            self.assertEqual(self.bridge.ensure_entry(), entry)
+            self.assertEqual(run.call_count, 1)
+
+    def test_fresh_checkout_installs_service_dependencies_before_build(self):
+        service = self.root / 'services/tesseract'
+        service.mkdir(parents=True)
+        def prepare(command, **kwargs):
+            if 'install' in command:
+                self.assertIn('--frozen-lockfile', command)
+                (service / 'node_modules').mkdir()
+            else:
+                self.assertTrue((service / 'node_modules').is_dir())
+                (service / 'dist').mkdir()
+                (service / 'dist/index.js').write_text('// compiled fixture')
+            return Mock(returncode=0)
+        with patch('tesseract.shutil.which', side_effect=lambda name: '/test/pnpm' if name == 'pnpm' else None), patch('tesseract.subprocess.run', side_effect=prepare) as run:
+            self.assertTrue(self.bridge.ensure_entry().is_file())
+            self.assertEqual(run.call_count, 2)
+
+    def test_prepared_entry_is_reused_without_running_another_build(self):
+        service = self.root / 'services/tesseract'
+        (service / 'node_modules').mkdir(parents=True)
+        (service / 'dist').mkdir()
+        entry = service / 'dist/index.js'
+        entry.write_text('// fixture')
+        with patch('tesseract.subprocess.run') as run:
+            self.assertEqual(self.bridge.ensure_entry(), entry)
+            run.assert_not_called()
+
+    def test_failed_or_incomplete_build_does_not_report_success(self):
+        with patch('tesseract.shutil.which', side_effect=lambda name: '/test/pnpm' if name == 'pnpm' else None), patch('tesseract.subprocess.run', return_value=Mock(returncode=1, stderr='fixture-secret')):
+            with self.assertRaisesRegex(ValueError, 'preparation failed') as error:
+                self.bridge.ensure_entry()
+            self.assertNotIn('fixture-secret', str(error.exception))
+        with patch('tesseract.shutil.which', side_effect=lambda name: '/test/pnpm' if name == 'pnpm' else None), patch('tesseract.subprocess.run', return_value=Mock(returncode=0)):
+            with self.assertRaisesRegex(ValueError, 'did not produce'):
+                self.bridge.ensure_entry()
 
     def test_rejects_missing_credentials_without_writing_secrets(self):
         with self.assertRaises(ValueError):
